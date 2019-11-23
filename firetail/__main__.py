@@ -17,7 +17,7 @@ if discord.version_info.major < 1:
 
 
 def run_firetail(debug=None, launcher=None):
-    firetail = bot.Firetail()
+    firetail = bot.Firetail(debug=debug)
     events.init_events(firetail, launcher=launcher)
     firetail.logger = logger.init_logger(debug_flag=debug)
     firetail.load_extension('firetail.core.commands')

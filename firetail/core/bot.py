@@ -16,7 +16,8 @@ from firetail.utils import ExitCodes
 if os.getenv("CONFIG") is not None:
     if not os.path.exists(os.getenv("CONFIG") + "/config.py"):
         print("Copying example_config.py to " + os.getenv("CONFIG") + "/config.py")
-        copyfile("/firetail/firetail/example_config.py", "/config/config.py") # for some reason os.getcwd() doesn't work inside a container ??
+        # for some reason os.getcwd() doesn't work inside a container ??
+        copyfile("/firetail/firetail/example_config.py", "/config/config.py")
         sys.exit(1)
 
 if os.getenv("CONFIG") is not None:
@@ -59,23 +60,12 @@ class Firetail(commands.Bot):
         self.session = aiohttp.ClientSession(loop=self.loop)
         self.esi_data = ESI(self.session)
         self.loop.create_task(self.load_db())
+        self.debug = bool(kwargs["debug"])
 
     async def load_db(self):
         await db.create_tables()
         data = await db.select("SELECT * FROM prefixes")
         self.prefixes = dict(data)
-
-    async def send_cmd_help(self, ctx):
-        if ctx.invoked_subcommand:
-            pages = await self.formatter.format_help_for(
-                ctx, ctx.invoked_subcommand)
-            for page in pages:
-                await ctx.author.send(page)
-        else:
-            pages = await self.formatter.format_help_for(
-                ctx, ctx.command)
-            for page in pages:
-                await ctx.author.send(page)
 
     async def shutdown(self, *, restart=False):
         """Shutdown the bot.
