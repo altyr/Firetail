@@ -42,11 +42,15 @@ async def check_is_mod(ctx):
 
 async def check_spam(ctx):
     def send_warning():
-        return ctx.author.send('WARNING: You are being rate limited from using bot commands.'
-                          ' Try again in {} seconds or DM me the commands.'.
-                          format(wait_time))
+        return ctx.author.send(
+            'WARNING: You are being rate limited from using bot commands.'
+            ' Try again in {} seconds or DM me the commands.'.format(wait_time)
+        )
     if 'help' in ctx.message.content or ctx.guild is None:
         return True
+    if ctx.author.id == ctx.bot.owner:
+        return True
+
     spam_list = ctx.bot.bot_users
     spam_list_length = len(spam_list)
     spam_list.append(ctx.author.id)
@@ -94,7 +98,7 @@ async def check_spam(ctx):
 async def check_whitelist(ctx):
     if ctx.guild is None:
         return True
-    sql = ''' SELECT * FROM whitelist WHERE `location_id` = (?) '''
+    sql = "SELECT * FROM whitelist WHERE 'location_id' = (?)"
     values = (ctx.channel.id,)
     result = await db.select_var(sql, values)
     if result is None or len(result) is 0:
