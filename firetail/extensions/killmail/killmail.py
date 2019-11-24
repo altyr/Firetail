@@ -91,7 +91,7 @@ class Killmail(commands.Cog):
         await db.execute_sql(sql, values)
         log.info(f'Killmail - Bad Channel {channel_id} removed successfully')
 
-    @commands.group(invoke_without_command=True)
+    @commands.group(aliases=["km", "killmails"], invoke_without_command=True)
     async def killmail(self, ctx, *, channel: discord.TextChannel = None):
         """Show the current channel's killmail subscriptions."""
 
@@ -156,7 +156,6 @@ class Killmail(commands.Cog):
                 await ctx.error(f"ID {sub_id} does not match any of your killmail subscriptions.")
                 return
 
-            print(sub)
             id_, channel_id, server_id, losses, threshold, group_id = sub
             if server_id != ctx.guild.id:
                 await ctx.error(f"ID {sub_id} does not match any of your killmail subscriptions.")
@@ -178,7 +177,11 @@ class Killmail(commands.Cog):
         for rm_id in rm_ids:
             del self.subs[rm_id]
 
-        await ctx.success('All killmail subscriptions have been removed for this channel.')
+        await ctx.success(
+            "All killmails removed for this channel.",
+            "You may see a more killmails that had already been submitted "
+            "and partially processed in the message queue."
+        )
 
     @checks.is_mod()
     @commands.command(hidden=True)
