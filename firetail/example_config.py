@@ -20,7 +20,7 @@ preload_extensions = [
     'group_lookup',         # Get corp/alliance info
     'jump_planner',         # Provides the shortcut for dotlan jump planning
     'jump_range',           # Provides the shortcut for dotlan jump range
-    'killmails',            # Killmail posting extension
+    'killmail',             # Killmail posting extension
     'location_scout',       # Provides intel on systems/constellations/regions
     'price',                # Price check extension
     'sov_tracker',          # Provides real time info on sov fights
