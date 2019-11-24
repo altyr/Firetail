@@ -1,43 +1,53 @@
+import inspect
 import logging
-import logging.handlers
-import sys
-import os
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
+
+import better_exceptions
+
+import firetail
+
+better_exceptions.hook()
+
+LOG_PATH = Path(Path(inspect.getfile(firetail)).parent, 'logs')
+LOG_PATH.mkdir(exist_ok=True)
+
+LOG_FORMAT = logging.Formatter(
+    '%(asctime)s %(levelname)s %(module)s %(funcName)s %(lineno)d: %(message)s',
+    datefmt="[%Y-%m-%d %H:%M:%S]"
+)
+
+
+def create_fh(name: str):
+    """Create a logging filehandler based on given file path."""
+
+    fh = RotatingFileHandler(
+        filename=Path(LOG_PATH, f"{name}.log"),
+        encoding='utf-8', mode='a',
+        maxBytes=400000,
+        backupCount=20,
+    )
+    fh.setFormatter(LOG_FORMAT)
+    return fh
 
 
 def init_logger(debug_flag=False):
-    log_level = logging.INFO if debug_flag else logging.WARNING
 
-    # d_py logs
+    logging.getLogger().setLevel(logging.DEBUG)
+
     discord_log = logging.getLogger("discord")
-    discord_log.setLevel(log_level)
-    console = logging.StreamHandler()
-    console.setLevel(log_level)
-    discord_log.addHandler(console)
+    discord_log.addHandler(create_fh('discord'))
 
-    # firetail logs
-    logger = logging.getLogger("firetail")
+    firetail_log = logging.getLogger("firetail")
+    firetail_log.addHandler(create_fh('firetail'))
 
-    firetail_format = logging.Formatter(
-        '%(asctime)s %(levelname)s %(module)s %(funcName)s %(lineno)d: '
-        '%(message)s',
-        datefmt="[%d/%m/%Y %H:%M:%S]")
-
-    stdout_handler = logging.StreamHandler(sys.stdout)
-    stdout_handler.setFormatter(firetail_format)
-    logger.setLevel(log_level)
-
-    if os.getenv("LOG") is not None:
-        logfile_path = os.getenv("LOG")
-    else:
-        logfile_path = os.getcwd() + '/firetail/logs/firetail.log'
-
-    fhandler = logging.handlers.RotatingFileHandler(
-        filename=str(logfile_path), encoding='utf-8', mode='a',
-        maxBytes=400000, backupCount=20)
-    fhandler.setFormatter(firetail_format)
-
-    logger.addHandler(fhandler)
     if debug_flag:
-        logger.addHandler(stdout_handler)
+        discord_log.setLevel(logging.INFO)
+        firetail_log.setLevel(logging.DEBUG)
+    else:
+        discord_log.setLevel(logging.ERROR)
+        firetail_log.setLevel(logging.WARNING)
 
-    return logger
+    firetail_log.addHandler(logging.StreamHandler())
+
+    return firetail_log
