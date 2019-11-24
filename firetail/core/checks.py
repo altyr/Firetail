@@ -1,6 +1,8 @@
-import discord
 import time
+
+import discord
 from discord.ext import commands
+
 from firetail.lib import db
 
 
@@ -43,8 +45,8 @@ async def check_is_mod(ctx):
 async def check_spam(ctx):
     def send_warning():
         return ctx.author.send(
-            'WARNING: You are being rate limited from using bot commands.'
-            ' Try again in {} seconds or DM me the commands.'.format(wait_time)
+            'WARNING: You are being rate limited from using bot commands. '
+            f'Try again in {wait_time} seconds or DM me the commands.'
         )
     if 'help' in ctx.message.content or ctx.guild is None:
         return True
@@ -101,7 +103,7 @@ async def check_whitelist(ctx):
     sql = "SELECT * FROM whitelist WHERE 'location_id' = (?)"
     values = (ctx.channel.id,)
     result = await db.select_var(sql, values)
-    if result is None or len(result) is 0:
+    if result is None or len(result) == 0:
         return True
     for role in result:
         for user_role in ctx.author.roles:
