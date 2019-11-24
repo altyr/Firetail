@@ -17,6 +17,9 @@ log = logging.getLogger(__name__)
 class CharLookup(commands.Cog):
     """This extension handles looking up characters."""
 
+    def __init__(self, bot):
+        self.bot = bot
+
     @commands.command(aliases=["char"])
     @checks.spam_check()
     @checks.is_whitelist()
@@ -191,13 +194,14 @@ class CharLookup(commands.Cog):
                         return None, None
 
     async def zkill_stats(self, character_id):
-        async with aiohttp.ClientSession() as session:
-            url = f'https://zkillboard.com/api/stats/characterID/{character_id}/'
-            async with session.get(url) as resp:
+        url = f'https://zkillboard.com/api/stats/characterID/{character_id}/'
+        async with self.bot.session.get(url) as resp:
+            try:
                 data = await resp.json(content_type=None)
-                if 'allTimeSum' in data:
-                    return data
+            except json.JSONDecodeError:
                 return None
+        if 'allTimeSum' in data:
+            return data
 
     async def firetail_intel(self, character_id, character_name, zkill_stats):
         try:
@@ -310,20 +314,22 @@ class CharLookup(commands.Cog):
                     return 'Balanced PVP Pilot', special
 
     async def last_kill(self, kill_url):
-        async with aiohttp.ClientSession() as session:
-            async with session.get(kill_url) as resp:
-                data = await resp.text()
-                data = json.loads(data)
-                try:
-                    kill_esi_url = (
-                        f"https://esi.evetech.net/latest/killmails/{data[0]['killmail_id']}/{data[0]['zkb']['hash']}/"
-                    )
-                    async with session.get(kill_esi_url) as kill_resp:
-                        data = await kill_resp.text()
-                        data = json.loads(data)
-                        return data[0]
-                except Exception:
-                    return None
+        async with self.bot.session.get(kill_url) as resp:
+            try:
+                data = await resp.json(content_type=None)
+            except json.JSONDecodeError:
+                return None
+
+        kill_esi_url = (
+            f"https://esi.evetech.net/latest/killmails/{data[0]['killmail_id']}/{data[0]['zkb']['hash']}/"
+        )
+
+        async with self.bot.session.get(kill_esi_url) as resp:
+            try:
+                data = await resp.json(content_type=None)
+            except json.JSONDecodeError:
+                return None
+            return data[0]
 
     def most_common(self, lst):
         return max(set(lst), key=lst.count)
