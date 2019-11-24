@@ -1,0 +1,33 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.org/simple"
+verify_ssl = true
+
+[packages]
+"discord.py" = "~=1.2.5"
+python-dateutil = ">=2.6"
+asyncpg = ">=0.13"
+pytz = "*"
+feedparser = "*"
+better_exceptions = "*"
+
+[dev-packages]
+flake8 = "~=3.7"
+#flake8-annotations = "~=1.1"
+#flake8-bugbear = "~=19.8"
+#flake8-docstrings = "~=1.4"
+flake8-import-order = "~=0.18"
+flake8-string-format = "~=0.2"
+flake8-tidy-imports = "~=2.0"
+flake8-todo = "~=0.7"
+pre-commit = "~=1.18"
+safety = "~=1.8"
+dodgy = "~=0.1"
+
+[requires]
+python_version = "3.6"
+
+[scripts]
+bot = "python -m firetail --debug"
+lint = "python -m flake8"
+precommit = "pre-commit install"
