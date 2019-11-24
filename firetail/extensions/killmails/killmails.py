@@ -1,16 +1,21 @@
-from firetail.lib import db
-from firetail.utils import make_embed
 import asyncio
 import json
+import logging
+
+from discord.ext import commands
+
+from firetail.lib import db
+from firetail.utils import make_embed
+
+log = logging.getLogger(__name__)
 
 
-class Killmails:
+class Killmails(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.session = bot.session
-        self.config = bot.config
         self.logger = bot.logger
-        self.loop = asyncio.get_event_loop()
+        self.loop = bot.loop
         self.loop.create_task(self.tick_loop())
 
     async def tick_loop(self):
@@ -29,7 +34,7 @@ class Killmails:
 
     async def process_data(self, kill_data):
         sent_channels = []
-        config = self.config
+        config = self.bot.config
         km_groups = config.killmail['killmailGroups']
         big_kills = config.killmail['bigKills']
         big_kills_value = config.killmail['bigKillsValue']
@@ -112,17 +117,15 @@ class Killmails:
                 await self.process_kill(channel_id, kill_data, True)
 
     async def process_kill(self, channel_id, kill_data, big=False, loss=False):
-        global final_blow_corp_zkill, final_blow_ship_zkill, final_blow_alliance_zkill, final_blow_corp_zkill, final_blow_ship_zkill, final_blow_corp_zkill, final_blow_ship_zkill, final_blow_zkill, final_blow_alliance_zkill, final_blow_corp_zkill, final_blow_ship_zkill, final_blow_zkill, victim_alliance_zkill, victim_zkill, victim_alliance_zkill, victim_zkill
-        bot = self.bot
         final_blow_name, final_blow_ship, final_blow_corp, final_blow_alliance = None, None, None, None
         kill_id = kill_data['killID']
         kill_time = kill_data['killmail']['killmail_time'].split('T', 1)[1][:-4]
         value_raw = kill_data['zkb']['totalValue']
-        value = '{0:,.2f}'.format(float(value_raw))
+        value = f'{float(value_raw):,.2f}'
         try:
             victim_id = kill_data['killmail']['victim']['character_id']
             victim_name = await self.bot.esi_data.character_name(victim_id)
-            victim_zkill = "https://zkillboard.com/character/{}/".format(victim_id)
+            victim_zkill = f"https://zkillboard.com/character/{victim_id}/"
         except Exception:
             victim_name = None
         ship_lost_id = kill_data['killmail']['victim']['ship_type_id']
@@ -131,12 +134,12 @@ class Killmails:
         victim_corp_id = kill_data['killmail']['victim']['corporation_id']
         victim_corp_raw = await self.bot.esi_data.corporation_info(victim_corp_id)
         victim_corp = victim_corp_raw['name']
-        victim_corp_zkill = "https://zkillboard.com/corporation/{}/".format(victim_corp_id)
+        victim_corp_zkill = f"https://zkillboard.com/corporation/{victim_corp_id}/"
         try:
             victim_alliance_id = kill_data['killmail']['victim']['alliance_id']
             victim_alliance_raw = await self.bot.esi_data.alliance_info(victim_alliance_id)
             victim_alliance = victim_alliance_raw['name']
-            victim_alliance_zkill = "https://zkillboard.com/alliance/{}/".format(victim_alliance_id)
+            victim_alliance_zkill = f"https://zkillboard.com/alliance/{victim_alliance_id}/"
         except Exception:
             victim_alliance = None
         attacker_count = 0
@@ -146,13 +149,13 @@ class Killmails:
                 try:
                     final_blow_id = attacker['character_id']
                     final_blow_name = await self.bot.esi_data.character_name(final_blow_id)
-                    final_blow_zkill = "https://zkillboard.com/character/{}/".format(final_blow_id)
+                    final_blow_zkill = f"https://zkillboard.com/character/{final_blow_id}/"
                 except Exception:
                     final_blow_name = None
                 try:
                     final_blow_ship_id = attacker['ship_type_id']
                     final_blow_ship_raw = await self.bot.esi_data.type_info_search(final_blow_ship_id)
-                    final_blow_ship_zkill = "https://zkillboard.com/ship/{}/".format(final_blow_ship_id)
+                    final_blow_ship_zkill = f"https://zkillboard.com/ship/{final_blow_ship_id}/"
                     final_blow_ship = final_blow_ship_raw['name']
                 except Exception:
                     final_blow_ship = 'UNK'
@@ -160,12 +163,12 @@ class Killmails:
                 final_blow_corp_id = attacker['corporation_id']
                 final_blow_corp_raw = await self.bot.esi_data.corporation_info(final_blow_corp_id)
                 final_blow_corp = final_blow_corp_raw['name']
-                final_blow_corp_zkill = "https://zkillboard.com/corporation/{}/".format(final_blow_corp_id)
+                final_blow_corp_zkill = f"https://zkillboard.com/corporation/{final_blow_corp_id}/"
                 try:
                     final_blow_alliance_id = attacker['alliance_id']
                     final_blow_alliance_raw = await self.bot.esi_data.alliance_info(final_blow_alliance_id)
                     final_blow_alliance = final_blow_alliance_raw['name']
-                    final_blow_alliance_zkill = "https://zkillboard.com/alliance/{}/".format(final_blow_alliance_id)
+                    final_blow_alliance_zkill = f"https://zkillboard.com/alliance/{final_blow_alliance_id}/"
                 except Exception:
                     final_blow_alliance = None
                 break
@@ -185,13 +188,13 @@ class Killmails:
             special_info = '**~Possible AWOX~**'
         elif solo:
             special_info = '**~Solo kill~**'
-        killmail_zkill = "https://zkillboard.com/kill/{}/".format(kill_id)
+        killmail_zkill = f"https://zkillboard.com/kill/{kill_id}/"
         if '-' in solar_system_name:
             solar_system_name = solar_system_name.upper()
-        title = "{} Destroyed in {}".format(ship_lost, solar_system_name)
+        title = f"{ship_lost} Destroyed in {solar_system_name}"
         message_type = 'success'
         if big:
-            title = "BIG KILL REPORTED: {} Destroyed in {}".format(ship_lost, solar_system_name)
+            title = f"BIG KILL REPORTED: {ship_lost} Destroyed in {solar_system_name}"
             message_type = 'info'
         if loss:
             message_type = 'error'
@@ -199,94 +202,103 @@ class Killmails:
                         title_url=killmail_zkill)
         em.set_footer(icon_url=self.bot.user.avatar_url,
                       text="Provided Via firetail Bot + ZKill")
-        em.set_thumbnail(url="https://image.eveonline.com/Type/{}_64.png".format(ship_lost_id))
+        em.set_thumbnail(url=f"https://image.eveonline.com/Type/{ship_lost_id}_64.png")
         if victim_name is not None and victim_alliance is not None:
-            em.add_field(name="Victim",
-                         value="Name: [{}]({})\nCorp: [{}]({})\nAlliance: [{}]({})"
-                         .format(victim_name,
-                                 victim_zkill,
-                                 victim_corp,
-                                 victim_corp_zkill,
-                                 victim_alliance,
-                                 victim_alliance_zkill),
-                         inline=False)
+            em.add_field(
+                name="Victim",
+                value=(
+                    f"Name: [{victim_name}]({victim_zkill})\n"
+                    f"Corp: [{victim_corp}]({victim_corp_zkill})\n"
+                    f"Alliance: [{victim_alliance}]({victim_alliance_zkill})"
+                ),
+                inline=False
+            )
         elif victim_name is not None and victim_alliance is None:
-            em.add_field(name="Victim",
-                         value="Name: [{}]({})\nCorp: [{}]({})"
-                         .format(victim_name,
-                                 victim_zkill,
-                                 victim_corp,
-                                 victim_corp_zkill),
-                         inline=False)
+            em.add_field(
+                name="Victim",
+                value=(
+                    f"Name: [{victim_name}]({victim_zkill})\n"
+                    f"Corp: [{victim_corp}]({victim_corp_zkill})"
+                ),
+                inline=False
+            )
         elif victim_name is None and victim_alliance is not None:
-            em.add_field(name="Kill Info",
-                         value="Corp: [{}]({})\nAlliance: [{}]({})"
-                         .format(victim_corp,
-                                 victim_corp_zkill,
-                                 victim_alliance,
-                                 victim_alliance_zkill),
-                         inline=False)
+            em.add_field(
+                name="Kill Info",
+                value=(
+                    f"Corp: [{victim_corp}]({victim_corp_zkill})\n"
+                    f"Alliance: [{victim_alliance}]({victim_alliance_zkill})"
+                ),
+                inline=False
+            )
         elif victim_name is None and victim_alliance is None:
-            em.add_field(name="Kill Info",
-                         value="Corp: [{}]({})".format(victim_corp, victim_corp_zkill), inline=False)
+            em.add_field(
+                name="Kill Info",
+                value=f"Corp: [{victim_corp}]({victim_corp_zkill})",
+                inline=False
+            )
         if final_blow_name is not None and final_blow_alliance is not None:
-            em.add_field(name="Final Blow",
-                         value="Name: [{}]({})\nShip: [{}]({})\nCorp: [{}]({})\nAlliance: [{}]({})"
-                         .format(final_blow_name,
-                                 final_blow_zkill,
-                                 final_blow_ship,
-                                 final_blow_ship_zkill,
-                                 final_blow_corp,
-                                 final_blow_corp_zkill,
-                                 final_blow_alliance,
-                                 final_blow_alliance_zkill),
-                         inline=False)
+            em.add_field(
+                name="Final Blow",
+                value=(
+                    f"Name: [{final_blow_name}]({final_blow_zkill})\n"
+                    f"Ship: [{final_blow_ship}]({final_blow_ship_zkill})\n"
+                    f"Corp: [{final_blow_corp}]({final_blow_corp_zkill})\n"
+                    f"Alliance: [{final_blow_alliance}]({final_blow_alliance_zkill})"
+                ),
+                inline=False
+            )
         elif final_blow_name is not None and final_blow_alliance is None:
-            em.add_field(name="Final Blow",
-                         value="Name: [{}]({})\nShip: [{}]({})\nCorp: [{}]({})"
-                         .format(final_blow_name,
-                                 final_blow_zkill,
-                                 final_blow_ship,
-                                 final_blow_ship_zkill,
-                                 final_blow_corp,
-                                 final_blow_corp_zkill), inline=False)
+            em.add_field(
+                name="Final Blow",
+                value=(
+                    f"Name: [{final_blow_name}]({final_blow_zkill})\n"
+                    f"Ship: [{final_blow_ship}]({final_blow_ship_zkill})\n"
+                    f"Corp: [{final_blow_corp}]({final_blow_corp_zkill})"
+                ),
+                inline=False
+            )
         elif final_blow_name is None and final_blow_alliance is not None:
-            em.add_field(name="Final Blow",
-                         value="Structure: [{}]({})\nCorp: [{}]({})\nAlliance: [{}]({})"
-                         .format(final_blow_ship,
-                                 final_blow_ship_zkill,
-                                 final_blow_corp,
-                                 final_blow_corp_zkill,
-                                 final_blow_alliance,
-                                 final_blow_alliance_zkill),
-                         inline=False)
+            em.add_field(
+                name="Final Blow",
+                value=(
+                    f"Structure: [{final_blow_ship}]({final_blow_ship_zkill})\n"
+                    f"Corp: [{final_blow_corp}]({final_blow_corp_zkill})\n"
+                    f"Alliance: [{final_blow_alliance}]({final_blow_alliance_zkill})"
+                ),
+                inline=False
+            )
         elif final_blow_name is False and final_blow_alliance is None:
-            em.add_field(name="Final Blow",
-                         value="Structure: [{}]({})\nCorp: [{}]({})"
-                         .format(final_blow_ship,
-                                 final_blow_ship_zkill,
-                                 final_blow_corp,
-                                 final_blow_corp_zkill),
-                         inline=False)
-        em.add_field(name="Details",
-                     value='{}\nTime: {} EVE\nValue: {} ISK\nNearest Celestial: {}\n[zKill Link]({})'
-                     .format(special_info,
-                             kill_time,
-                             value,
-                             location_name,
-                             killmail_zkill),
-                     inline=False)
-        channel = bot.get_channel(int(channel_id))
+            em.add_field(
+                name="Final Blow",
+                value=(
+                    f"Structure: [{final_blow_ship}]({final_blow_ship_zkill})\n"
+                    f"Corp: [{final_blow_corp}]({final_blow_corp_zkill})"
+                ),
+                inline=False
+            )
+        em.add_field(
+            name="Details",
+            value=(
+                f'{special_info}\n'
+                f'Time: {kill_time} EVE\n'
+                f'Value: {value} ISK\n'
+                f'Nearest Celestial: {location_name}\n'
+                f'[zKill Link]({killmail_zkill})'
+            ),
+            inline=False
+        )
+        channel = self.bot.get_channel(int(channel_id))
         try:
             return await channel.send(embed=em)
         except Exception:
             self.logger.exception(
-                'Killmail - Killmail ID {} failed to send to channel {} due to..'.format(kill_id, channel_id))
+                f'Killmail - Killmail ID {kill_id} failed to send to channel {channel_id} due to..'
+            )
             await self.remove_bad_channel(channel_id)
 
     async def request_data(self):
-        base_url = "https://redisq.zkillboard.com"
-        zkill = "{}/listen.php?queueID={}".format(base_url, self.bot.user.id)
+        zkill = f"https://redisq.zkillboard.com/listen.php?queueID={self.bot.user.id}"
         async with self.bot.session.get(zkill) as resp:
             data = await resp.text()
         try:
@@ -297,7 +309,7 @@ class Killmails:
             return None
 
     async def remove_bad_channel(self, channel_id):
-        sql = ''' DELETE FROM add_kills WHERE `channelid` = (?) '''
+        sql = "DELETE FROM add_kills WHERE channelid = (?)"
         values = (channel_id,)
         await db.execute_sql(sql, values)
-        return self.logger.info('Killmail - Bad Channel {} removed successfully'.format(channel_id))
+        return self.logger.info(f'Killmail - Bad Channel {channel_id} removed successfully')

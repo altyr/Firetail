@@ -1,15 +1,17 @@
-from discord.ext import commands
-from firetail.lib import db
-from firetail.utils import make_embed
-from firetail.core import checks
-from datetime import datetime
-import pytz
-import re
 import asyncio
 import json
+import re
+from datetime import datetime
+
+import pytz
+from discord.ext import commands
+
+from firetail.core import checks
+from firetail.lib import db
+from firetail.utils import make_embed
 
 
-class FleetUp:
+class FleetUp(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.session = bot.session
@@ -44,13 +46,19 @@ class FleetUp:
                         horizontal_rule = '\n\n-------'
                     if len(operation['Doctrines']) > 0:
                         doctrine = operation['Doctrines']
-                    embed.add_field(name="Fleet Information", value='Fleet Name: {}\nFleet Time: {} EVE\n'
-                                                                    'Planned Doctrines: {}\nForm-Up Location: {} {}\n'
-                                                                    'Organizer: {}\n\nDetails: {}{}'.
-                                    format(operation['Subject'], operation['StartString'], doctrine,
-                                           operation['Location'], operation['LocationInfo'], operation['Organizer'],
-                                           operation['Details'], horizontal_rule),
-                                    inline=False)
+                    embed.add_field(
+                        name="Fleet Information",
+                        value=(
+                            f"Fleet Name: {operation['Subject']}\n"
+                            f"Fleet Time: {operation['StartString'],} EVE\n"
+                            f"Planned Doctrines: {doctrine}\n"
+                            f"Form-Up Location: {operation['Location']} {operation['LocationInfo']}\n"
+                            f"Organizer: {operation['Organizer']}\n"
+                            "\n"
+                            f"Details: {operation['Details']}{horizontal_rule}"
+                        ),
+                        inline=False
+                    )
             if upcoming:
                 dest = ctx.author if ctx.bot.config.dm_only else ctx
                 await dest.send(embed=embed)
@@ -106,22 +114,29 @@ class FleetUp:
         doctrine = 'N/A'
         if len(operation['Doctrines']) > 0:
             doctrine = operation['Doctrines']
-        embed = make_embed(title=title, title_url='https://fleet-up.com/Operation#{}'.format(operation['Id']))
+        embed = make_embed(title=title, title_url="fhttps://fleet-up.com/Operation#{operation['Id']}")
         embed.set_footer(icon_url=self.bot.user.avatar_url,
                          text="Provided Via Firetail Bot & Fleet-Up")
         embed.set_thumbnail(url="https://fleet-up.com/Content/Images/logo_title.png")
-        embed.add_field(name="Fleet Information", value='Fleet Name: {}\nFleet Time: {} EVE\nPlanned Doctrines: {}\n'
-                                                        'Form-Up Location: {} {}\nOrganizer: {}\n\nDetails: {}'.
-                        format(operation['Subject'], operation['StartString'], doctrine,
-                               operation['Location'], operation['LocationInfo'], operation['Organizer'],
-                               operation['Details']))
+        embed.add_field(
+            name="Fleet Information",
+            value=(
+                f"Fleet Name: {operation['Subject']}\n"
+                f"Fleet Time: {operation['StartString']} EVE\n"
+                f"Planned Doctrines: {doctrine}\n"
+                f"Form-Up Location: {operation['Location']} {operation['LocationInfo']}\n"
+                f"Organizer: {operation['Organizer']}\n"
+                "\n"
+                f"Details: {operation['Details']}"
+            )
+        )
         dest = self.bot.get_channel(int(self.config.fleetUp['channel_id']))
         await dest.send(embed=embed)
 
     async def request_data(self, config):
         base_url = "http://api.fleet-up.com/Api.svc/l5z6cq36hs7ojxHjk7GshvePY/"
-        full_url = "{}{}/{}/Operations/{}".format(base_url, config.fleetUp['user_id'], config.fleetUp['api_code'],
-                                                  config.fleetUp['group_id'])
+        full_url = f"{base_url}{config.fleetUp['user_id']}/{config.fleetUp['api_code']}/" \
+                   f"Operations/{config.fleetUp['group_id']}"
         async with self.bot.session.get(full_url) as resp:
             data = await resp.text()
         try:

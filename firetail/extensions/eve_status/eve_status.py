@@ -1,41 +1,43 @@
+import logging
+
 from discord.ext import commands
 
-from firetail.utils import make_embed
 from firetail.core import checks
 
+log = logging.getLogger(__name__)
 
-class EveStatus:
+
+class EveStatus(commands.Cog):
     """This extension handles the status command."""
 
-    def __init__(self, bot):
-        self.bot = bot
-        self.config = bot.config
-        self.logger = bot.logger
-
-    @commands.command(name='status', aliases=["tq", "eve"])
+    @commands.command(aliases=["tq", "eve"])
     @checks.spam_check()
     @checks.is_whitelist()
-    async def _status(self, ctx):
+    async def status(self, ctx):
         """Shows the current status of TQ."""
-        # Spam Check
 
-        global status, player_count
-        self.logger.info('EveStatus - {} requested server info.'.format(str(ctx.message.author)))
+        log.info(f'EveStatus - {ctx.message.author} requested server info.')
+
         data = await ctx.bot.esi_data.server_info()
-        try:
-            if data.get('start_time'):
-                status = 'Online'
-                player_count = data.get('players')
-        except Exception:
-            status = 'Offline'
-            player_count = 'N/A'
+        start_time = data.get('start_time') if data else None
 
-        embed = make_embed(guild=ctx.guild)
-        embed.set_footer(icon_url=ctx.bot.user.avatar_url,
-                         text="Provided Via Firetail Bot")
-        embed.set_thumbnail(url="https://image.eveonline.com/Alliance/434243723_64.png")
-        embed.add_field(name="Status", value="Server State:\nPlayer Count:", inline=True)
-        embed.add_field(name="-", value="{}\n{}".format(status, player_count), inline=True)
+        if start_time:
+            player_count = data.get('players')
+            embed = await ctx.embed(
+                "Server Online", f"{player_count:,} players connected.",
+                icon="https://image.eveonline.com/Alliance/434243723_64.png",
+                colour="green",
+                send=False
+            )
+        else:
+            embed = await ctx.error("Server Offline", send=False)
+
+        # embed = make_embed(guild=ctx.guild)
+        # embed.set_footer(icon_url=ctx.bot.user.avatar_url, text="Provided Via Firetail Bot")
+        # embed.set_thumbnail(url="https://image.eveonline.com/Alliance/434243723_64.png")
+        # embed.add_field(name="Status", value="Server State:\nPlayer Count:", inline=True)
+        # embed.add_field(name="-", value=f"{status}\n{player_count}", inline=True)
+
         dest = ctx.author if ctx.bot.config.dm_only else ctx
         await dest.send(embed=embed)
         if ctx.bot.config.delete_commands:

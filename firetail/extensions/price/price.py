@@ -1,64 +1,79 @@
+import logging
+
 from discord.ext import commands
-from firetail.utils import make_embed
+
 from firetail.core import checks
+from firetail.utils import make_embed
+
+log = logging.getLogger(__name__)
+
+HUBS = {
+    'jita': 60003760,
+    'amarr': 60008494,
+    'dodixie': 60011866,
+    'rens': 60004588,
+    'hek': 60005686
+}
 
 
-class Price:
+class Price(commands.Cog):
     """This extension handles price lookups."""
 
-    def __init__(self, bot):
-        self.bot = bot
-        self.config = bot.config
-        self.logger = bot.logger
-
-    hub_id = {'jita': 60003760,
-              'amarr': 60008494,
-              'dodixie': 60011866,
-              'rens': 60004588,
-              'hek': 60005686}
-
-    @commands.command(name='price', aliases=["pc", "jita", "amarr", "dodixie", "rens", "hek", ])
+    @commands.command(aliases=["pc", *HUBS])
     @checks.spam_check()
     @checks.is_whitelist()
-    async def _price(self, ctx):
+    async def price(self, ctx, *, item: str):
         """Gets you price information from the top trade hubs.
-        Use **!price item** or **!amarr item** (Works for Jita, Amarr, Dodixie, Rens, Hek)"""
-        if len(ctx.message.content.split()) == 1:
+
+        Use **!price item** or **!amarr item** (Works for Jita, Amarr, Dodixie, Rens, Hek)
+        """
+
+        if not item:
             dest = ctx.author if ctx.bot.config.dm_only else ctx
-            return await dest.send('**ERROR:** Use **!help price** for more info.')
-        config = self.config
-        item = ctx.message.content.split(' ', 1)[1]
-        if item.lower() == 'fanfest ticket' or item.lower() == 'fanfest':
-            msg = "Looking to go to Fanfest?\n\nWhen: April 12th-14th\n\nEvent Info: https://fanfest.eveonline.com/\n" \
-                  "Buy Tickets: " \
-                  "https://www.eventbrite.com/e/eve-fanfest-2018-tickets-38384202182?aff=website"
-            if config.dm_only:
+            embed = await ctx.error("An item to lookip needs to be provided.", send=False)
+            await dest.send(embed=embed)
+            return
+
+        if item.lower() in ['fanfest ticket', 'fanfest']:
+            msg = (
+                "Looking to go to Fanfest?\n\n"
+                "When: April 12th-14th\n\n"
+                "Event Info: <https://fanfest.eveonline.com/>\n"
+                "Buy Tickets: "
+                "<https://www.eventbrite.com/e/eve-fanfest-2018-tickets-38384202182?aff=website>"
+            )
+            if ctx.bot.config.dm_only:
                 return await ctx.author.send(msg)
             else:
                 return await ctx.channel.send(msg)
-        system = 60003760
-        lookup = 'Jita'
-        if ctx.message.content.split()[0][len(config.bot_prefix):].lower() != 'price' and \
-                ctx.message.content.split()[0][len(config.bot_prefix):].lower() != 'pc':
-            lookup = ctx.message.content.split()[0][len(config.bot_prefix):].lower()
-            system = self.hub_id[lookup]
-        data = await ctx.bot.esi_data.market_data(item, system)
-        self.logger.info('Price - {} requested price information for a {}'.format(ctx.author, item))
-        if data is None:
-            self.logger.info('Price - {} could not be found'.format(item))
-            msg = "**{}** was not found, are you sure it's an item?".format(item)
-            if config.dm_only:
-                return await ctx.author.send(msg)
+
+        async with ctx.typing():
+            if ctx.invoked_with not in ["pc", "price"]:
+                lookup = ctx.invoked_with.title()
             else:
-                return await ctx.channel.send(msg)
-        if data is False:
-            self.logger.info('Price - {} multiple items found'.format(item))
-            msg = "Multiple items found matching '**{}**', please be more specific".format(item)
-            if config.dm_only:
-                return await ctx.author.send(msg)
-            else:
-                return await ctx.channel.send(msg)
-        else:
+                lookup = 'Jita'
+
+            log.info(f'Price - {ctx.author} requested price information for {item}')
+
+            data = await ctx.bot.esi_data.market_data(item, HUBS.get(ctx.invoked_with, 60003760))
+
+            if not data:
+                if data is None:
+                    log.info(f'Price - {item} could not be found')
+                    embed = await ctx.error(f"'{item}' not found", "Are you sure it's an item?", send=False)
+                if data is False:
+                    log.info(f'Price - {item} multiple items found')
+                    embed = await ctx.error(
+                        f"'{item}' matched multiple items",
+                        "Please try again with more a more specific query.",
+                        send=False
+                    )
+
+                if ctx.bot.config.dm_only:
+                    return await ctx.author.send(embed=embed)
+
+                return await ctx.channel.send(embed=embed)
+
             type_id_raw = await ctx.bot.esi_data.esi_search(item, 'inventory_type')
             type_id = type_id_raw['inventory_type'][0]
             type_name_raw = await ctx.bot.esi_data.item_info(type_id)
@@ -73,19 +88,39 @@ class Price:
             sellavg = '{0:,.2f}'.format(float(data['sell']['weightedAverage']))
             sell_volume = '{0:,.0f}'.format(float(data['sell']['volume']))
             sell_orders = '{0:,.0f}'.format(float(data['sell']['orderCount']))
-            em = make_embed(msg_type='info', title=type_name.title(),
-                            title_url="https://market.fuzzwork.co.uk/type/{}/".format(type_id),
-                            content="Price information from " + lookup.title())
-            em.set_footer(icon_url=ctx.bot.user.avatar_url,
-                          text="Provided Via firetail Bot + Fuzzwork Market")
-            em.set_thumbnail(url="https://image.eveonline.com/Type/{}_64.png".format(type_id))
-            em.add_field(name="Buy", value="Low: {}\nAvg: {}\nHigh: {}\nNumber of Orders: {}\nVolume: {}".format(buymin, buyavg, buymax, buy_orders, buy_volume),
-                         inline=True)
-            em.add_field(name="Sell", value="Low: {}\nAvg: {}\nHigh: {}\nNumber of Orders: {}\nVolume: {}".format(sellmin, sellavg, sellmax, sell_orders, sell_volume),
-                         inline=True)
-            if config.dm_only:
+            em = make_embed(
+                title=f"{lookup} System",
+                title_url=f"https://market.fuzzwork.co.uk/type/{type_id}/",
+                subtitle_url=f"https://market.fuzzwork.co.uk/type/{type_id}/",
+                subtitle=type_name.title(),
+                guild=ctx.guild
+            )
+            em.set_footer(text="Pricing data sourced from Fuzzworks Market API")
+            em.set_thumbnail(url=f"https://image.eveonline.com/Type/{type_id}_64.png")
+            em.add_field(
+                name="Buy",
+                value=(
+                    f"Low: {buymin}\n"
+                    f"Avg: {buyavg}\n"
+                    f"High: {buymax}\n"
+                    f"Number of Orders: {buy_orders}\n"
+                    f"Volume: {buy_volume}"
+                ),
+                inline=True
+            )
+            em.add_field(
+                name="Sell",
+                value=(
+                    f"Low: {sellmin}\n"
+                    f"Avg: {sellavg}\n"
+                    f"High: {sellmax}\n"
+                    f"Number of Orders: {sell_orders}\n"
+                    f"Volume: {sell_volume}"),
+                inline=True
+            )
+            if ctx.bot.config.dm_only:
                 await ctx.author.send(embed=em)
             else:
                 await ctx.channel.send(embed=em)
-            if config.delete_commands:
+            if ctx.bot.config.delete_commands:
                 await ctx.message.delete()
