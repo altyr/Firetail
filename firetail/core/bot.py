@@ -93,19 +93,19 @@ class Firetail(commands.Bot):
         uptime = self.uptime
         year_str, month_str, day_str, hour_str = ('',)*4
         if uptime.years >= 1:
-            year_str = "{0}y ".format(uptime.years)
+            year_str = f"{uptime.years}y "
         if uptime.months >= 1 or year_str:
-            month_str = "{0}m ".format(uptime.months)
+            month_str = f"{uptime.months}m "
         if uptime.days >= 1 or month_str:
             d_unit = 'd' if month_str else ' days'
-            day_str = "{0}{1} ".format(uptime.days, d_unit)
+            day_str = f"{uptime.days}{d_unit} "
         if uptime.hours >= 1 or day_str:
             h_unit = ':' if month_str else ' hrs'
-            hour_str = "{0}{1}".format(uptime.hours, h_unit)
+            hour_str = f"{uptime.hours}{h_unit}"
         m_unit = '' if month_str else ' mins'
-        mins = uptime.minutes if month_str else ' {0}'.format(uptime.minutes)
-        secs = '' if day_str else ' {0} secs'.format(uptime.seconds)
-        min_str = "{0}{1}{2}".format(mins, m_unit, secs)
+        mins = uptime.minutes if month_str else f' {uptime.minutes}'
+        secs = '' if day_str else f' {uptime.seconds} secs'
+        min_str = f"{mins}{m_unit}{secs}"
 
         uptime_str = ''.join((year_str, month_str, day_str, hour_str, min_str))
 
