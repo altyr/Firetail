@@ -29,5 +29,6 @@ python_version = "3.6"
 
 [scripts]
 bot = "python -m firetail --debug"
+live = "python -m firetail"
 lint = "python -m flake8"
 precommit = "pre-commit install"
