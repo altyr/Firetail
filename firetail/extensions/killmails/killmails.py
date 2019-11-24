@@ -200,8 +200,7 @@ class Killmails(commands.Cog):
             message_type = 'error'
         em = make_embed(msg_type=message_type, title=title,
                         title_url=killmail_zkill)
-        em.set_footer(icon_url=self.bot.user.avatar_url,
-                      text="Provided Via firetail Bot + ZKill")
+        em.set_footer(text="Killboard data sourced from ZKill")
         em.set_thumbnail(url=f"https://image.eveonline.com/Type/{ship_lost_id}_64.png")
         if victim_name is not None and victim_alliance is not None:
             em.add_field(
