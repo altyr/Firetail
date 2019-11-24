@@ -5,9 +5,9 @@ import asyncio
 import sys
 
 import discord
+
 from firetail.core import bot, events
-from firetail.utils import logger
-from firetail.utils import ExitCodes
+from firetail.utils import ExitCodes, logger
 
 if discord.version_info.major < 1:
     print("You are not running discord.py v1.0.0a or above.\n\n"
