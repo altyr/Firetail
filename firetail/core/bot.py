@@ -16,7 +16,8 @@ from firetail.utils import ExitCodes
 if os.getenv("CONFIG") is not None:
     if not os.path.exists(os.getenv("CONFIG") + "/config.py"):
         print("Copying example_config.py to " + os.getenv("CONFIG") + "/config.py")
-        copyfile("/firetail/firetail/example_config.py", "/config/config.py") # for some reason os.getcwd() doesn't work inside a container ??
+        # for some reason os.getcwd() doesn't work inside a container ??
+        copyfile("/firetail/firetail/example_config.py", "/config/config.py")
         sys.exit(1)
 
 if os.getenv("CONFIG") is not None:
@@ -59,23 +60,12 @@ class Firetail(commands.Bot):
         self.session = aiohttp.ClientSession(loop=self.loop)
         self.esi_data = ESI(self.session)
         self.loop.create_task(self.load_db())
+        self.debug = bool(kwargs["debug"])
 
     async def load_db(self):
         await db.create_tables()
         data = await db.select("SELECT * FROM prefixes")
         self.prefixes = dict(data)
-
-    async def send_cmd_help(self, ctx):
-        if ctx.invoked_subcommand:
-            pages = await self.formatter.format_help_for(
-                ctx, ctx.invoked_subcommand)
-            for page in pages:
-                await ctx.author.send(page)
-        else:
-            pages = await self.formatter.format_help_for(
-                ctx, ctx.command)
-            for page in pages:
-                await ctx.author.send(page)
 
     async def shutdown(self, *, restart=False):
         """Shutdown the bot.
@@ -103,19 +93,19 @@ class Firetail(commands.Bot):
         uptime = self.uptime
         year_str, month_str, day_str, hour_str = ('',)*4
         if uptime.years >= 1:
-            year_str = "{0}y ".format(uptime.years)
+            year_str = f"{uptime.years}y "
         if uptime.months >= 1 or year_str:
-            month_str = "{0}m ".format(uptime.months)
+            month_str = f"{uptime.months}m "
         if uptime.days >= 1 or month_str:
             d_unit = 'd' if month_str else ' days'
-            day_str = "{0}{1} ".format(uptime.days, d_unit)
+            day_str = f"{uptime.days}{d_unit} "
         if uptime.hours >= 1 or day_str:
             h_unit = ':' if month_str else ' hrs'
-            hour_str = "{0}{1}".format(uptime.hours, h_unit)
+            hour_str = f"{uptime.hours}{h_unit}"
         m_unit = '' if month_str else ' mins'
-        mins = uptime.minutes if month_str else ' {0}'.format(uptime.minutes)
-        secs = '' if day_str else ' {0} secs'.format(uptime.seconds)
-        min_str = "{0}{1}{2}".format(mins, m_unit, secs)
+        mins = uptime.minutes if month_str else f' {uptime.minutes}'
+        secs = '' if day_str else f' {uptime.seconds} secs'
+        min_str = f"{mins}{m_unit}{secs}"
 
         uptime_str = ''.join((year_str, month_str, day_str, hour_str, min_str))
 

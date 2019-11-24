@@ -1,45 +1,51 @@
-from discord.ext import commands
-import pytz
+import logging
 from datetime import datetime
 
-from firetail.utils import make_embed
+import pytz
+from discord.ext import commands
+
 from firetail.core import checks
 
 
-class EveTime:
+log = logging.getLogger(__name__)
+
+TIMEZONES = {
+    'EVE Time': 'UTC',
+    'PST/California': 'America/Los_Angeles',
+    'EST/New York': 'America/New_York',
+    'CET/Copenhagen': 'Europe/Copenhagen',
+    'MSK/Moscow': 'Europe/Moscow',
+    'AEDT/Sydney': 'Australia/Sydney',
+}
+
+
+class EveTime(commands.Cog):
     """This extension handles the time commands."""
 
-    def __init__(self, bot):
-        self.bot = bot
-        self.config = bot.config
-        self.logger = bot.logger
-
-    TIMEZONES = {
-        'EVE Time': 'UTC',
-        'PST/California': 'America/Los_Angeles',
-        'EST/New York': 'America/New_York',
-        'CET/Copenhagen': 'Europe/Copenhagen',
-        'MSK/Moscow': 'Europe/Moscow',
-        'AEST/Sydney': 'Australia/Sydney',
-    }
-
-    @commands.command(name='time')
+    @commands.command()
     @checks.spam_check()
     @checks.is_whitelist()
-    async def _time(self, ctx):
+    async def time(self, ctx):
         """Shows the time in a range of timezones."""
-        self.logger.info('EveTime - {} requested time info.'.format(str(ctx.message.author)))
+
+        log.info('EveTime - {ctx.message.author} requested time info.')
+
         tz_field = []
         time_field = []
-        for display, zone in self.TIMEZONES.items():
-            tz_field.append("**{}**".format(display))
+        for display, zone in TIMEZONES.items():
+            tz_field.append(str(display))
             time_field.append(datetime.now(pytz.timezone(zone)).strftime('%H:%M'))
 
-        embed = make_embed(guild=ctx.guild)
-        embed.set_footer(icon_url=ctx.bot.user.avatar_url,
-                         text="Provided Via Firetail Bot")
-        embed.add_field(name="Time Zones", value='\n'.join(tz_field), inline=True)
-        embed.add_field(name="Time", value='\n'.join(time_field), inline=True)
+        embed = await ctx.embed(
+            f"{tz_field.pop(0)}: {time_field.pop(0)}",
+            fields={
+                "Time Zones": '\n'.join(tz_field),
+                "Time": '\n'.join(time_field),
+            },
+            inline=True,
+            send=False
+        )
+
         dest = ctx.author if ctx.bot.config.dm_only else ctx
         await dest.send(embed=embed)
         if ctx.bot.config.delete_commands:

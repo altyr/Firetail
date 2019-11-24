@@ -1,72 +1,89 @@
 import datetime
 import logging
 import traceback
+from contextlib import suppress
+
 import aiohttp
-import re
-
 from discord.ext import commands
-from firetail.lib import db
 
-import firetail
+from firetail.core.context import Context
 
-INTRO = ("====================================\n"
-         "firetail - An EVE Online Discord Bot\n"
-         "====================================\n")
+INTRO = (
+    "=========================================",
+    "Firetail - The Discord Bot for EVE Online",
+    "========================================="
+)
 
 log = logging.getLogger("firetail")
+
+
+async def update_discordbots(bot):
+    if bot.debug:
+        return
+
+    try:
+        token = bot.config.dbots_token
+    except AttributeError:
+        token = None
+
+    if not token:
+        return
+
+    with suppress(aiohttp.ClientError):
+        db_token = bot.config.db_token
+        url = f"https://discordbots.org/api/bots/{bot.user.id}/stats"
+        headers = {"Authorization": db_token}
+        payload = {"server_count": len(bot.guilds)}
+        async with bot.session as r:
+            r.post(url, data=payload, headers=headers)
 
 
 def init_events(bot, launcher=None):
     @bot.event
     async def on_connect():
         if hasattr(bot, 'launch_time'):
-            print("Reconnected.")
+            return print("Reconnected.")
 
-    @bot.event
-    async def on_ready():
         if not hasattr(bot, 'launch_time'):
             bot.launch_time = datetime.datetime.utcnow()
         if not launcher:
-            print(INTRO)
-        print("We're on!\n")
+            print("\n".join(INTRO))
+        if bot.invite_url:
+            print(f"\nInvite URL: {bot.invite_url}\n")
+
+    @bot.event
+    async def on_ready():
         guilds = len(bot.guilds)
         users = len(list(bot.get_all_members()))
-        print("Version: {}\n".format(firetail.__version__))
         if guilds:
-            print("Servers: {}".format(guilds))
-            print("Members: {}".format(users))
+            print(f"Servers: {guilds}")
+            print(f"Members: {users}")
         else:
-            print("I'm not in any server yet, so be sure to invite me!")
-        if bot.invite_url:
-            print("\nInvite URL: {}\n".format(bot.invite_url))
-            try:
-                db_token = bot.config.db_token
-                url = "https://discordbots.org/api/bots/{}/stats".format(bot.user.id)
-                headers = {"Authorization": db_token}
-                payload = {"server_count": len(bot.guilds)}
-                async with aiohttp.ClientSession() as client:
-                    await client.post(url, data=payload, headers=headers)
-            except:
-                return
+            print("Invite me to a server!")
+        await update_discordbots(bot)
 
     @bot.event
     async def on_command_error(ctx, error):
         if isinstance(error, commands.MissingRequiredArgument):
-            await bot.send_cmd_help(ctx)
+            await ctx.error(
+                "A required argument was missing",
+                f"Command Usage: ```{ctx.prefix}{ctx.command.qualified_name} {ctx.command.signature}```"
+            )
         elif isinstance(error, commands.BadArgument):
-            await bot.send_cmd_help(ctx)
+            await ctx.error(
+                "An invalid argument was encountered",
+                f"Command Usage: ```{ctx.prefix}{ctx.command.qualified_name} {ctx.command.signature}```"
+            )
         elif isinstance(error, commands.DisabledCommand):
-            await ctx.send("That command is disabled.")
+            pass
         elif isinstance(error, commands.CheckFailure):
             pass
         elif isinstance(error, commands.CommandNotFound):
             pass
         elif isinstance(error, commands.NoPrivateMessage):
-            await ctx.send("That command is not available in DMs.")
+            await ctx.error("Not available in DMs")
         elif isinstance(error, commands.CommandOnCooldown):
-            await ctx.send("This command is on cooldown. "
-                           "Try again in {:.2f}s"
-                           "".format(error.retry_after))
+            await ctx.error(f"Command is on cooldown.", "Try again in {error.retry_after:.2f}s")
         elif isinstance(error, commands.CommandInvokeError) and ctx.author.id is bot.config.bot_master:
             # Need to test if the following still works
             """
@@ -79,19 +96,13 @@ def init_events(bot, launcher=None):
                 await ctx.send(msg)
                 return
             """
-            log.exception("Exception in command '{}'"
-                          "".format(ctx.command.qualified_name),
-                          exc_info=error.original)
-            message = ("Error in command '{}'. Check your console or "
-                       "logs for details."
-                       "".format(ctx.command.qualified_name))
-            exception_log = ("Exception in command '{}'\n"
-                             "".format(ctx.command.qualified_name))
-            exception_log += "".join(traceback.format_exception(
-                type(error), error, error.__traceback__))
+            log.exception(f"Exception in command '{ctx.command.qualified_name}'", exc_info=error.original)
+            message = f"Error in command '{ctx.command.qualified_name}'. Check your console or logs for details."
+            exception_log = "Exception in command '{ctx.command.qualified_name}'\n"
+            exception_log += "".join(traceback.format_exception(type(error), error, error.__traceback__))
             bot._last_exception = exception_log
             if "Missing Permissions" in exception_log:
-                await ctx.send("**ERROR:** The Bot Does Not Have All Required Permissions In That Channel.")
+                await ctx.error("Permissions are missing.")
             else:
                 await ctx.send(message)
 
@@ -101,10 +112,11 @@ def init_events(bot, launcher=None):
     @bot.event
     async def on_message(message):
         bot.counter["messages_read"] += 1
-        for trigger, response in bot.config.auto_responses.items():
-            if trigger == re.sub('[^A-Za-z0-9]+', '', message.content.split(' ', 1)[0]):
-                await message.channel.send("{.author.mention} {}".format(message, response))
-        await bot.process_commands(message)
+        if message.author.bot:
+            return
+
+        ctx = await bot.get_context(message, cls=Context)
+        await bot.invoke(ctx)
 
     @bot.event
     async def on_resumed():
@@ -112,40 +124,28 @@ def init_events(bot, launcher=None):
 
     @bot.event
     async def on_command(command):
-        if 'help' in command.message.content.lower() and command.guild is not None:
-            await command.send("{.author.mention} check your DM's for the help info.".format(command))
         bot.counter["processed_commands"] += 1
+
+        if not bot.config.dm_only:
+            return
+        if 'help' not in command.message.content.lower():
+            return
+        if command.guild:
+            await command.send(f"{command.author.mention} check your DM's for the help info.")
 
     @bot.event
     async def on_guild_join(guild):
-        log.info("Connected to a new guild. Guild ID/Name: {}/{}".format(str(guild.id), guild.name))
-        try:
-            db_token = bot.config.db_token
-            url = "https://discordbots.org/api/bots/{}/stats".format(bot.user.id)
-            headers = {"Authorization": db_token}
-            payload = {"server_count": len(bot.guilds)}
-            async with aiohttp.ClientSession() as client:
-                await client.post(url, data=payload, headers=headers)
-        except:
-            return
+        log.info(f"Connected to a new guild. Guild ID/Name: {guild.id}/{guild.name}")
+        await update_discordbots(bot)
 
     @bot.event
     async def on_guild_remove(guild):
-        log.info("Leaving guild. Guild ID/Name: {}/{}".format(str(guild.id), guild.name))
-        try:
-            db_token = bot.config.db_token
-            url = "https://discordbots.org/api/bots/{}/stats".format(bot.user.id)
-            headers = {"Authorization": db_token}
-            payload = {"server_count": len(bot.guilds)}
-            async with aiohttp.ClientSession() as client:
-                await client.post(url, data=payload, headers=headers)
-        except:
-            return
+        log.info("Leaving guild. Guild ID/Name: {guild.id}/{guild.name}")
+        await update_discordbots(bot)
 
     @bot.event
     async def on_member_ban(guild, user):
-        log.info("New Ban Reported. Guild ID/Name: {}/{} -- Member ID/Name: {}/{}".format(str(guild.id), guild.name,
-                                                                                          str(user.id), user.name))
+        log.info("New Ban Reported. Guild ID/Name: {guild.id}/{guild} -- Member ID/Name: {user.id}/{user}")
 
     @bot.event
     async def on_member_join(member):

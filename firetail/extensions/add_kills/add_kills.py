@@ -1,17 +1,18 @@
-from firetail.lib import db
-from firetail.core import checks
+import logging
+
 from discord.ext import commands
 
+from firetail.core import checks
+from firetail.lib import db
 
-class AddKills:
-    def __init__(self, bot):
-        self.bot = bot
-        self.config = bot.config
-        self.logger = bot.logger
+log = logging.getLogger(__name__)
 
-    @commands.command(name='addkills')
+
+class AddKills(commands.Cog):
+
+    @commands.command()
     @checks.is_mod()
-    async def _add_kills(self, ctx):
+    async def addkills(self, ctx):
         """Do '!addkills ID' to get all killmails in the channel.
         Do '!addkills ID false' to not receive losses.
         Do '!addkills ID 1000000' to not receive kills of value less than the number.
@@ -58,12 +59,12 @@ class AddKills:
         channel = ctx.message.channel.id
         author = ctx.message.author.id
         server = ctx.message.guild.id
-        clean = '{0:,.2f}'.format(float(threshold))
-        group_corp = await self.bot.esi_data.corporation_info(group)
-        group_alliance = await self.bot.esi_data.alliance_info(group)
-        solar_system = await self.bot.esi_data.system_info(group)
-        region = await self.bot.esi_data.region_info(group)
-        character = await self.bot.esi_data.character_info(group)
+        clean = f'{float(threshold):,.2f}'
+        group_corp = await ctx.bot.esi_data.corporation_info(group)
+        group_alliance = await ctx.bot.esi_data.alliance_info(group)
+        solar_system = await ctx.bot.esi_data.system_info(group)
+        region = await ctx.bot.esi_data.region_info(group)
+        character = await ctx.bot.esi_data.character_info(group)
         loss = ''
         if losses == 'true':
             loss = ' and lossmails'
@@ -87,27 +88,28 @@ class AddKills:
         elif 'error' not in character:
             name = character['name']
         if group == 9:
-            name = 'EVE Wide {}+ Kills'.format(clean)
-        sql = ''' REPLACE INTO add_kills(channelid,serverid,losses,threshold,groupid,ownerid)
-                  VALUES(?,?,?,?,?,?) '''
+            name = f'EVE Wide {clean}+ Kills'
+        sql = "REPLACE INTO add_kills(channelid, serverid, losses, threshold, groupid, ownerid) VALUES(?,?,?,?,?,?)"
         values = (channel, server, losses, threshold, group, author)
         await db.execute_sql(sql, values)
-        self.logger.info('addkills - ' + str(ctx.message.author) + ' added killmail tracking to their server.')
-        return await ctx.channel.send('**Success** - This channel will begin receiving killmails{} for {} when the value'
-                                      ' is greater than {} ISK as they occur.'.format(loss, name, clean))
+        log.info('addkills - ' + str(ctx.message.author) + ' added killmail tracking to their server.')
+        await ctx.channel.send(
+            f'**Success** - This channel will begin receiving killmails{loss} for {name} '
+            f'when the value is greater than {clean} ISK as they occur.'
+        )
 
     async def remove_server(self, ctx):
-        sql = ''' DELETE FROM add_kills WHERE `channelid` = (?) '''
+        sql = "DELETE FROM add_kills WHERE channelid = (?)"
         values = (ctx.message.channel.id,)
         try:
             await db.execute_sql(sql, values)
         except Exception:
             return await ctx.channel.send('**ERROR** - Failed to remove killmails. Contact the bot'
                                           ' owner for assistance.')
-        self.logger.info('addkills - ' + str(ctx.message.author) + ' removed killmail tracking from a channel.')
+        log.info('addkills - ' + str(ctx.message.author) + ' removed killmail tracking from a channel.')
         return await ctx.channel.send('**Success** - This bot will no longer report any killmails for this channel.')
 
-    @_add_kills.error
-    async def _add_kills_error(self, ctx, error):
+    @addkills.error
+    async def addkills_error(self, ctx, error):
         if isinstance(error, commands.CheckFailure):
             return await ctx.channel.send('Only channel moderators can do that.')

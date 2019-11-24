@@ -1,36 +1,40 @@
-from discord.ext import commands
-from firetail.utils import make_embed
-from firetail.core import checks
-
-import aiohttp
-import json
+import logging
 import operator
 
+from discord.ext import commands
 
-class LocationScout:
+from firetail.core import checks
+from firetail.utils import make_embed
+
+log = logging.getLogger(__name__)
+
+
+class LocationScout(commands.Cog):
     """This extension handles price lookups."""
 
     def __init__(self, bot):
         self.bot = bot
-        self.config = bot.config
-        self.logger = bot.logger
 
-    @commands.command(name='scout', aliases=["recon", "system", "wormhole"])
+    @commands.command(aliases=["recon", "system", "wormhole"])
     @checks.spam_check()
     @checks.is_whitelist()
-    async def _scout(self, ctx):
-        """Gets you location info
+    async def scout(self, ctx):
+        """
+        Gets you location info
+
         Supports systems/wormholes/constellations/regions.
-        Use **!scout location** or **!recon location**"""
+        Use **!scout location** or **!recon location**
+        """
+
         if len(ctx.message.content.split()) == 1:
             dest = ctx.author if ctx.bot.config.dm_only else ctx
             return await dest.send('**ERROR:** Use **!help scout** for more info.')
         location = ctx.message.content.split(' ', 1)[1]
         data, location_type = await self.get_data(location)
-        self.logger.info('Scout - {} requested information for {}'.format(ctx.author, location))
+        log.info(f'Scout - {ctx.author} requested information for {location}')
         if data is None:
             dest = ctx.author if ctx.bot.config.dm_only else ctx
-            return await dest.send('**ERROR:** Could not find a location named {}'.format(location))
+            return await dest.send(f'**ERROR:** Could not find a location named {location}')
         if location_type == 'system':
             await self.format_system(ctx, data)
         elif location_type == 'constellation':
@@ -63,12 +67,10 @@ class LocationScout:
                     return None, None
 
     async def format_system(self, ctx, data):
-        global attacker_score, defender_score, fight_type, target_system_name, defender_name
         async with ctx.channel.typing():
             sov_alliance_id = 1
             sov_corp = 'N/A'
             sov_alliance = 'N/A'
-            config = self.config
             name = data['name']
             security_status = round(data['security_status'], 1)
             constellation_id = data['constellation_id']
@@ -102,12 +104,11 @@ class LocationScout:
                             attacker_score = fights['attackers_score']
                             break
             ship_jumps = await self.bot.esi_data.get_jump_info(data['system_id'])
-            logo_link = 'https://imageserver.eveonline.com/Alliance/{}_64.png'.format(sov_alliance_id)
-            zkill_link = "https://zkillboard.com/system/{}".format(data['system_id'])
-            dotlan_link = "http://evemaps.dotlan.net/system/{}".format(name.replace(' ', '_'))
-            region_dotlan = "http://evemaps.dotlan.net/map/{}".format(region_name.replace(' ', '_'))
-            constellation_dotlan = "http://evemaps.dotlan.net/map/{}/{}".format(region_name.replace(' ', '_'),
-                                                                                constellation_name.replace(' ', '_'))
+            logo_link = f'https://imageserver.eveonline.com/Alliance/{sov_alliance_id}_64.png'
+            zkill_link = f"https://zkillboard.com/system/{data['system_id']}"
+            dotlan_link = f"http://evemaps.dotlan.net/system/{name.replace(' ', '_')}"
+            region_dotlan = f"http://evemaps.dotlan.net/map/{region_name.replace(' ', '_')}"
+            constellation_dotlan = f"http://evemaps.dotlan.net/map/{region_name}/{constellation_name}".replace(' ', '_')
             hub_id = [30000142, 30002187, 30002053, 30002659, 30002510]
             report = 'a fairly dead system.'
             if data['system_id'] in hub_id and ship_kills >= 100:
@@ -135,50 +136,61 @@ class LocationScout:
                 report = 'to have multiple subcap ratting ships.'
             elif npc_kills > 150:
                 report = 'to have a few subcap ratting ships.'
-            firetail_intel = '{} is likely {}'.format(name, report)
-            embed = make_embed(msg_type='info', title=name,
-                               title_url="http://evemaps.dotlan.net/system/{}".format(name.replace(' ', '_')),
-                               content='[ZKill]({}) / [Dotlan]({})'.format(zkill_link, dotlan_link))
-            embed.set_footer(icon_url=ctx.bot.user.avatar_url,
-                             text="Provided Via firetail Bot")
+            firetail_intel = f'{name} is likely {report}'
+            embed = make_embed(
+                msg_type='info',
+                title=name,
+                title_url=f"http://evemaps.dotlan.net/system/{name.replace(' ', '_')}",
+                content=f'[ZKill]({zkill_link}) / [Dotlan]({dotlan_link})'
+            )
             embed.set_thumbnail(url=logo_link)
-            embed.add_field(name="Firetail Intel Report", value=firetail_intel,
-                            inline=False)
-            embed.add_field(name="General Info",
-                            value='Name:\nRegion:\nConstellation:\nSecurity Status:\nNumber of Planets:'
-                                  '\nNumber of Gates:')
-            embed.add_field(name="-",
-                            value='{}\n[{}]({})\n[{}]({})\n{}\n{}\n{}'.format(name, region_name, region_dotlan,
-                                                                              constellation_name, constellation_dotlan,
-                                                                              security_status, planet_count,
-                                                                              stargate_count)
-                            , inline=True)
+            embed.add_field(name="Firetail Intel Report", value=firetail_intel, inline=False)
+            embed.add_field(
+                name="General Info",
+                value=(
+                    f'Name: {name}\n'
+                    f'Region: [{region_name}]({region_dotlan})\n'
+                    f'Constellation: [{constellation_name}]({constellation_dotlan})\n'
+                    f'Security Status: {security_status}\n'
+                    f'Number of Planets: {planet_count}\n'
+                    f'Number of Gates: {stargate_count}'
+                ),
+                inline=False
+            )
             if sov_alliance != 'N/A' or sov_corp != 'N/A':
-                embed.add_field(name="Sov Holders", value='Holding Alliance:\nHolding Corp:')
-                embed.add_field(name="-",
-                                value='{}\n{}'.format(sov_alliance, sov_corp),
-                                inline=True)
+                embed.add_field(
+                    name="Sov Holders",
+                    value=f'Holding Alliance: {sov_alliance}\nHolding Corp: {sov_corp}',
+                    inline=False
+                )
             if active_sov is True:
-                embed.add_field(name="Active Sov Battle", value='Defender:\nTarget System:\nTarget Structure:'
-                                                                '\nDefender Score:\nAttacker Score:')
-                embed.add_field(name="-",
-                                value='{}\n{}\n{}\n{}\n{}'.format(defender_name, target_system_name, fight_type,
-                                                                  defender_score, attacker_score),
-                                inline=True)
-            embed.add_field(name="Stats For The Last Hour", value='Ship Kills:\nNPC Kills:\nPod Kills:\nShip Jumps:')
-            embed.add_field(name="-",
-                            value='{}\n{}\n{}\n{}'.format(ship_kills, npc_kills, pod_kills, ship_jumps),
-                            inline=True)
-            if config.dm_only:
-                await ctx.author.send(embed=embed)
-            else:
-                await ctx.channel.send(embed=embed)
-            if config.delete_commands:
+                embed.add_field(
+                    name="Active Sov Battle",
+                    value=(
+                        f'Defender: {defender_name}\n'
+                        f'Target System: {target_system_name}\n'
+                        f'Target Structure: {fight_type}\n'
+                        f'Defender Score: {defender_score}\n'
+                        f'Attacker Score: {attacker_score}'
+                    ),
+                    inline=False
+                )
+            embed.add_field(
+                name="Stats For The Last Hour",
+                value=(
+                    f'Ship Kills: {ship_kills}\n'
+                    f'NPC Kills: {npc_kills}\n'
+                    f'Pod Kills: {pod_kills}\n'
+                    f'Ship Jumps: {ship_jumps}'
+                ),
+                inline=False
+            )
+            await ctx.dest.send(embed=embed)
+            if ctx.bot.config.delete_commands:
                 await ctx.message.delete()
 
     async def format_constellation(self, ctx, data):
         async with ctx.channel.typing():
-            config = self.config
             name = data['name']
             region_id = data['region_id']
             region_data = await self.bot.esi_data.region_info(region_id)
@@ -190,8 +202,14 @@ class LocationScout:
                 ship_kills, npc_kills, pod_kills = await self.get_kill_info(system)
                 ship_jumps = await self.bot.esi_data.get_jump_info(system)
                 system_name = await self.bot.esi_data.system_name(system)
-                system_kills.append({'system': system_name, "npc_kills": npc_kills, "ship_kills": ship_kills,
-                                     "ship_jumps": ship_jumps})
+                system_kills.append(
+                    {
+                        "system": system_name,
+                        "npc_kills": npc_kills,
+                        "ship_kills": ship_kills,
+                        "ship_jumps": ship_jumps
+                    }
+                )
             top_npc_sorted = sorted(system_kills, key=operator.itemgetter("npc_kills"), reverse=True)
             top_ship_sorted = sorted(system_kills, key=operator.itemgetter("ship_kills"), reverse=True)
             sov_battles = await self.bot.esi_data.get_active_sov_battles()
@@ -205,54 +223,46 @@ class LocationScout:
                     target_system_id = fights['solar_system_id']
                     current_fights.append(target_system_id)
             sov_battle_count = len(current_fights)
-            dotlan_link = "http://evemaps.dotlan.net/map/{}/{}".format(region_name.replace(' ', '_'),
-                                                                       name.replace(' ', '_'))
-            region_dotlan = "http://evemaps.dotlan.net/map/{}".format(region_name.replace(' ', '_'))
-            embed = make_embed(msg_type='info', title='{} Constellation'.format(name),
-                               title_url="http://evemaps.dotlan.net/map/{}/{}".format(region_name.replace(' ', '_'),
-                                                                                      name.replace(' ', '_')),
-                               content='[Dotlan]({})'.format(dotlan_link))
-            embed.set_footer(icon_url=ctx.bot.user.avatar_url,
-                             text="Provided Via firetail Bot")
+            dotlan_link = f"http://evemaps.dotlan.net/map/{region_name}/{name}".replace(' ', '_')
+            region_dotlan = f"http://evemaps.dotlan.net/map/{region_name.replace(' ', '_')}"
+            embed = make_embed(
+                msg_type='info',
+                title=f'{name} Constellation',
+                title_url="http://evemaps.dotlan.net/map/{region_name}/{name}".replace(' ', '_'),
+                content=f'[Dotlan]({dotlan_link})'
+            )
             embed.set_thumbnail(url='https://imageserver.eveonline.com/Alliance/1_64.png')
-            embed.add_field(name="General Info",
-                            value='Name:\nRegion:\nNumber of Systems:')
-            embed.add_field(name="-",
-                            value='{}\n[{}]({})\n{}'.format(name, region_name, region_dotlan, systems_count),
-                            inline=True)
+            embed.add_field(
+                name="General Info",
+                value=f'Name: {name}\nRegion: [{region_name}]({region_dotlan})\nNumber of Systems: {systems_count}',
+                inline=False
+            )
             if active_sov is True:
-                embed.add_field(name="Active Sov Battles", value='Count:',
-                                inline=True)
-                embed.add_field(name="-",
-                                value='{}'.format(sov_battle_count), inline=True)
-            embed.add_field(name="Most NPC's Killed",
-                            value='1: {} ({} Killed)\n2: {} ({} Killed)\n3: {} ({} Killed)'.format(
-                                top_npc_sorted[0]['system'],
-                                top_npc_sorted[0]['npc_kills'],
-                                top_npc_sorted[1]['system'],
-                                top_npc_sorted[1]['npc_kills'],
-                                top_npc_sorted[2]['system'],
-                                top_npc_sorted[2]['npc_kills']),
-                            inline=False)
-            embed.add_field(name="Most Players's Killed",
-                            value='1: {} ({} Killed)\n2: {} ({} Killed)\n3: {} ({} Killed)'.format(
-                                top_ship_sorted[0]['system'],
-                                top_ship_sorted[0]['ship_kills'],
-                                top_ship_sorted[1]['system'],
-                                top_ship_sorted[1]['ship_kills'],
-                                top_ship_sorted[2]['system'],
-                                top_ship_sorted[2]['ship_kills']),
-                            inline=False)
-            if config.dm_only:
-                await ctx.author.send(embed=embed)
-            else:
-                await ctx.channel.send(embed=embed)
-            if config.delete_commands:
+                embed.add_field(name="Active Sov Battles", value=f'Count: {sov_battle_count}', inline=False)
+            embed.add_field(
+                name="Most NPC's Killed",
+                value=(
+                    f"1: {top_npc_sorted[0]['system']} ({top_npc_sorted[0]['npc_kills']} Killed)\n"
+                    f"2: {top_npc_sorted[1]['system']} ({top_npc_sorted[1]['npc_kills']} Killed)\n"
+                    f"3: {top_npc_sorted[2]['system']} ({top_npc_sorted[2]['npc_kills']} Killed)"
+                ),
+                inline=False
+            )
+            embed.add_field(
+                name="Most Players's Killed",
+                value=(
+                    f"1: {top_ship_sorted[0]['system']} ({top_ship_sorted[0]['ship_kills']} Killed)\n"
+                    f"2: {top_ship_sorted[1]['system']} ({top_ship_sorted[1]['ship_kills']} Killed)\n"
+                    f"3: {top_ship_sorted[2]['system']} ({top_ship_sorted[2]['ship_kills']} Killed)"
+                ),
+                inline=False
+            )
+            await ctx.dest.send(embed=embed)
+            if ctx.bot.config.delete_commands:
                 await ctx.message.delete()
 
     async def format_region(self, ctx, data):
         async with ctx.channel.typing():
-            config = self.config
             name = data['name']
             constellations = data['constellations']
             constellations_count = len(data['constellations'])
@@ -277,93 +287,98 @@ class LocationScout:
                     target_system_id = fights['solar_system_id']
                     current_fights.append(target_system_id)
             sov_battle_count = len(current_fights)
-            dotlan_link = "http://evemaps.dotlan.net/map/{}".format(name.replace(' ', '_'))
-            embed = make_embed(msg_type='info', title='{} Region'.format(name),
-                               title_url="http://evemaps.dotlan.net/map/{}".format(name.replace(' ', '_')),
-                               content='[Dotlan]({})'.format(dotlan_link))
-            embed.set_footer(icon_url=ctx.bot.user.avatar_url,
-                             text="Provided Via firetail Bot")
+            dotlan_link = f"http://evemaps.dotlan.net/map/{name.replace(' ', '_')}"
+            embed = make_embed(
+                msg_type='info',
+                title=f'{name} Region',
+                title_url=f"http://evemaps.dotlan.net/map/{name.replace(' ', '_')}",
+                content=f'[Dotlan]({dotlan_link})'
+            )
             embed.set_thumbnail(url='https://imageserver.eveonline.com/Alliance/1_64.png')
-            embed.add_field(name="General Info",
-                            value='Name:\nNumber of Constellations:\nNumber of Systems:')
-            embed.add_field(name="-",
-                            value='{}\n{}\n{}'.format(name, constellations_count, system_count), inline=True)
+            embed.add_field(
+                name="General Info",
+                value=(
+                    f'Name: {name}\n'
+                    f'Number of Constellations: {constellations_count}\n'
+                    f'Number of Systems: {system_count}'
+                ),
+                inline=False
+            )
             if active_sov is True:
-                embed.add_field(name="Active Sov Battles", value='Count:',
-                                inline=True)
-                embed.add_field(name="-",
-                                value='{}'.format(sov_battle_count), inline=True)
-            embed.add_field(name="Most NPC's Killed",
-                            value='1: {} ({} Killed)\n2: {} ({} Killed)\n3: {} ({} Killed)'.format(
-                                await self.bot.esi_data.system_name(top_npc_sorted[0]['system_id']),
-                                top_npc_sorted[0]['npc_kills'],
-                                await self.bot.esi_data.system_name(top_npc_sorted[1]['system_id']),
-                                top_npc_sorted[1]['npc_kills'],
-                                await self.bot.esi_data.system_name(top_npc_sorted[2]['system_id']),
-                                top_npc_sorted[2]['npc_kills']),
-                            inline=False)
-            embed.add_field(name="Most Players's Killed",
-                            value='1: {} ({} Killed)\n2: {} ({} Killed)\n3: {} ({} Killed)'.format(
-                                await self.bot.esi_data.system_name(top_ship_sorted[0]['system_id']),
-                                top_ship_sorted[0]['ship_kills'],
-                                await self.bot.esi_data.system_name(top_ship_sorted[1]['system_id']),
-                                top_ship_sorted[1]['ship_kills'],
-                                await self.bot.esi_data.system_name(top_ship_sorted[2]['system_id']),
-                                top_ship_sorted[2]['ship_kills']),
-                            inline=False)
-            if config.dm_only:
-                await ctx.author.send(embed=embed)
-            else:
-                await ctx.channel.send(embed=embed)
-            if config.delete_commands:
+                embed.add_field(name="Active Sov Battles", value=f'Count: {sov_battle_count}', inline=False)
+
+            system_0 = await self.bot.esi_data.system_name(top_npc_sorted[0]['system_id'])
+            system_1 = await self.bot.esi_data.system_name(top_npc_sorted[1]['system_id'])
+            system_2 = await self.bot.esi_data.system_name(top_npc_sorted[2]['system_id'])
+
+            embed.add_field(
+                name="Most NPC's Killed",
+                value=(
+                    f"1: {system_0} ({top_npc_sorted[0]['npc_kills']} Killed)\n"
+                    f"2: {system_1} ({top_npc_sorted[1]['npc_kills']} Killed)\n"
+                    f"3: {system_2} ({top_npc_sorted[2]['npc_kills']} Killed)"
+                ),
+                inline=False
+            )
+
+            system_0 = await self.bot.esi_data.system_name(top_ship_sorted[0]['system_id'])
+            system_1 = await self.bot.esi_data.system_name(top_ship_sorted[1]['system_id'])
+            system_2 = await self.bot.esi_data.system_name(top_ship_sorted[2]['system_id'])
+
+            embed.add_field(
+                name="Most Players's Killed",
+                value=(
+                    f"1: {system_0} ({top_ship_sorted[0]['npc_kills']} Killed)\n"
+                    f"2: {system_1} ({top_ship_sorted[1]['npc_kills']} Killed)\n"
+                    f"3: {system_2} ({top_ship_sorted[2]['npc_kills']} Killed)"
+                ),
+                inline=False
+            )
+
+            await ctx.dest.author.send(embed=embed)
+            if ctx.bot.config.delete_commands:
                 await ctx.message.delete()
 
     async def get_kill_info(self, system_id):
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                    'https://esi.tech.ccp.is/latest/universe/system_kills/?datasource=tranquility') as resp:
-                data = await resp.text()
-                data = json.loads(data)
-                ship_kills = 0
-                npc_kills = 0
-                pod_kills = 0
-                for system in data:
-                    if system['system_id'] == system_id:
-                        ship_kills = system['ship_kills']
-                        npc_kills = system['npc_kills']
-                        pod_kills = system['pod_kills']
-                        break
-                return ship_kills, npc_kills, pod_kills
+        url = 'https://esi.evetech.net/latest/universe/system_kills/?datasource=tranquility'
+        async with self.bot.session.get(url) as resp:
+            data = await resp.json(content_type=None)
+            ship_kills = 0
+            npc_kills = 0
+            pod_kills = 0
+            for system in data:
+                if system['system_id'] == system_id:
+                    ship_kills = system['ship_kills']
+                    npc_kills = system['npc_kills']
+                    pod_kills = system['pod_kills']
+                    break
+            return ship_kills, npc_kills, pod_kills
 
     async def get_sov_info(self, system_id):
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                    'https://esi.tech.ccp.is/latest/sovereignty/map/?datasource=tranquility') as resp:
-                data = await resp.text()
-                data = json.loads(data)
-                sov_alliance_id = 1
-                sov_corp = 'N/A'
-                sov_alliance = 'N/A'
-                for system in data:
-                    if system['system_id'] == system_id:
-                        if 'corporation_id' in system:
-                            sov_corp_id = system['corporation_id']
-                            corporation_info = await self.bot.esi_data.corporation_info(sov_corp_id)
-                            sov_corp = corporation_info['name']
-                        if 'alliance_id' in system:
-                            sov_alliance_id = system['alliance_id']
-                            alliance_info = await self.bot.esi_data.alliance_info(sov_alliance_id)
-                            sov_alliance = alliance_info['name']
-                        break
-                return sov_corp, sov_alliance, sov_alliance_id
+        url = 'https://esi.evetech.net/latest/sovereignty/map/?datasource=tranquility'
+        async with self.bot.session.get(url) as resp:
+            data = await resp.json(content_type=None)
+            sov_alliance_id = 1
+            sov_corp = 'N/A'
+            sov_alliance = 'N/A'
+            for system in data:
+                if system['system_id'] == system_id:
+                    if 'corporation_id' in system:
+                        sov_corp_id = system['corporation_id']
+                        corporation_info = await self.bot.esi_data.corporation_info(sov_corp_id)
+                        sov_corp = corporation_info['name']
+                    if 'alliance_id' in system:
+                        sov_alliance_id = system['alliance_id']
+                        alliance_info = await self.bot.esi_data.alliance_info(sov_alliance_id)
+                        sov_alliance = alliance_info['name']
+                    break
+            return sov_corp, sov_alliance, sov_alliance_id
 
     async def group_name(self, group_id):
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                    'https://esi.tech.ccp.is/latest/alliances/{}/?datasource=tranquility'.format(group_id)) as resp:
-                data = await resp.text()
-                data = json.loads(data)
-                try:
-                    return data["name"]
-                except Exception:
-                    return 'Unknown'
+        url = f'https://esi.evetech.net/latest/alliances/{group_id}/?datasource=tranquility'
+        async with self.bot.session.get(url) as resp:
+            data = await resp.json(content_type=None)
+            try:
+                return data["name"]
+            except Exception:
+                return 'Unknown'

@@ -4,7 +4,6 @@ import platform
 import textwrap
 import traceback
 import unicodedata
-
 from contextlib import redirect_stdout
 
 import discord
@@ -16,6 +15,7 @@ from firetail.core import checks
 
 def cleanup_code(content):
     """Automatically removes code blocks from the code."""
+
     # remove ```py\n```
     if content.startswith('```') and content.endswith('```'):
         return '\n'.join(content.split('\n')[1:-1])
@@ -25,26 +25,28 @@ def cleanup_code(content):
 
 
 def codeblock(contents, syntax="py"):
-    """Returns a list of codeblock text for the given content.
+    """
+    Returns a list of codeblock text for the given content.
 
     Content is broken into items with a character limitation to avoid
     going above single-message limits.
     """
-    paginator = commands.Paginator(
-        prefix='```{}'.format(syntax), max_size=2000)
+
+    paginator = commands.Paginator(prefix=f'```{syntax}', max_size=2000)
     for line in contents.split('\n'):
         for wrapline in textwrap.wrap(line, width=1990):
             paginator.add_line(wrapline.rstrip().replace('`', '\u200b`'))
     return paginator.pages
 
 
-class Dev:
+class Dev(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self._last_result = None
 
-    def __local_check(self, ctx):
+    def cog_check(self, ctx):
         """Limits all commands in the cog to only co_owners."""
+
         return checks.check_is_co_owner(ctx)
 
     @commands.command(name='eval')
@@ -67,24 +69,21 @@ class Dev:
         body = cleanup_code(body)
         stdout = io.StringIO()
 
-        to_compile = 'async def func():\n{}'.format(
-            textwrap.indent(body, "  "))
+        to_compile = f"async def func():\n{textwrap.indent(body, '  ')}"
 
         try:
             exec(to_compile, env)
         except Exception as e:
-            return await ctx.send(
-                '```py\n{}: {}\n```'.format(e.__class__.__name__, e))
+            return await ctx.send(f'```py\n{e.__class__.__name__}: {e}\n```')
 
         func = env['func']
         try:
             with redirect_stdout(stdout):
                 ret = await func()
-        except Exception as e:
+        except Exception:
             value = stdout.getvalue()
 
-            await ctx.send('```py\n{}{}\n```'.format(
-                value, traceback.format_exc()))
+            await ctx.send(f'```py\n{value}{traceback.format_exc()}\n```')
         else:
             value = stdout.getvalue()
             try:
@@ -98,47 +97,45 @@ class Dev:
                         await ctx.send(page)
             else:
                 self._last_result = ret
-                for page in codeblock("{}{}".format(value, ret)):
+                for page in codeblock(f"{value}{ret}"):
                     await ctx.send(page)
 
     @commands.command()
     async def charinfo(self, ctx, *, characters: str):
-        """Shows you information about unicode characters.
+        """
+        Shows you information about unicode characters.
 
         Only up to 25 characters at a time.
         """
+
         if len(characters) > 25:
-            return await ctx.send(
-                'Too many characters ({}/25)'.format(len(characters)))
+            return await ctx.send(f'Too many characters ({len(characters)}/25)')
+
         charlist = []
         rawlist = []
         for char in characters:
-            digit = '{0:x}'.format(ord(char))
-            url = "http://www.fileformat.info/info/unicode/char/{}".format(
-                digit)
-            name = "[{}]({})".format(unicodedata.name(char, ''), url)
-            u_code = '\\U{0:>08}'.format(digit)
+            digit = f'{ord(char):x}'
+            name = f"[{unicodedata.name(char, '')}](http://www.fileformat.info/info/unicode/char/{digit})"
+            u_code = f'\\U{digit:>08}'
             if len(str(digit)) <= 4:
-                u_code = '\\u{0:>04}'.format(digit)
-            charlist.append(
-                ' '.join(['`{}`:'.format(u_code.ljust(10)), name, '-', char]))
+                u_code = f'\\u{digit:>04}'
+            charlist.append(f'`{u_code.ljust(10)}`: {name} - {char}')
             rawlist.append(u_code)
 
         embed = utils.make_embed(
             msg_type='info',
             title='Character Info',
-            content='\n'.join(charlist))
+            content='\n'.join(charlist)
+        )
 
         if len(characters) > 1:
-            embed.add_field(
-                name='Raw',
-                value="`{}`".format(''.join(rawlist)),
-                inline=False)
+            embed.add_field(name='Raw', value=f"`{''.join(rawlist)}`", inline=False)
         await ctx.send(embed=embed)
 
     @commands.command()
     async def runas(self, ctx, member: discord.Member, *, new_cmd):
         """Run a command as a different member."""
+
         if await ctx.bot.is_owner(member):
             embed = utils.make_embed(
                 msg_type='error', title='No, you may not run as owner.')
@@ -151,6 +148,7 @@ class Dev:
     @commands.command(aliases=['cls'])
     async def clear_console(self, ctx):
         """Clear the console"""
+
         if platform.system() == 'Windows':
             os.system('cls')
         else:
@@ -160,11 +158,13 @@ class Dev:
     @commands.command()
     async def hi(self, ctx):
         """Say hi. Usually a test command for doing nothing much."""
+
         await ctx.send("Hi {} \U0001f44b".format(ctx.author.display_name))
 
     @commands.command(aliases=['priv', 'privs'])
     async def privilege(self, ctx, *, member: discord.Member = None):
         """Check the bot permission level of a member."""
+
         member = member or ctx.author
         ctx.author = member
 
