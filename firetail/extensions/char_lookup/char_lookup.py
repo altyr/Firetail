@@ -194,7 +194,7 @@ class CharLookup(commands.Cog):
         async with aiohttp.ClientSession() as session:
             url = f'https://zkillboard.com/api/stats/characterID/{character_id}/'
             async with session.get(url) as resp:
-                data = await resp.json()
+                data = await resp.json(content_type=None)
                 if 'allTimeSum' in data:
                     return data
                 return None
