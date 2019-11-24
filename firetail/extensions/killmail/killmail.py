@@ -45,7 +45,7 @@ class Killmail(commands.Cog):
             "INSERT INTO add_kills (channelid, serverid, groupid, ownerid, losses, threshold) "
             "VALUES (?, ?, ?, ?, ?, ?)"
         )
-        id_ = await db.execute_sql(sql, (channel_id, server_id, group_id, owner_id, losses, threshold))
+        id_ = await db.execute_sql(sql, (channel_id, server_id, group_id, owner_id, losses, threshold or 1))
         sub = Subscription(id_, self.bot.get_channel(channel_id), threshold, convert_to_bool(losses), group_id)
         self.subs[sub.id] = sub
 
