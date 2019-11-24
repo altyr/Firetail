@@ -182,3 +182,4 @@ def execute_sql(sql, var=None, *, db=None):
     cursor = db.cursor()
     cursor.execute(sql, var)
     db.commit()
+    return cursor.lastrowid
