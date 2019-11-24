@@ -1,16 +1,18 @@
+import importlib
 import os
 import pkgutil
+import traceback
 
 from discord.ext import commands
 
-from firetail.core import checks
 from firetail import utils
+from firetail.core import checks
 
 
-class ExtensionManager:
+class ExtensionManager(commands.Cog):
     """Commands to add, remove and change extensions for Firetail."""
 
-    def __local_check(self, ctx):
+    def cog_check(self, ctx):
         return checks.check_is_co_owner(ctx)
 
     @commands.group()
@@ -39,9 +41,8 @@ class ExtensionManager:
             if is_loaded:
                 count_loaded += 1
                 status = ":white_small_square:"
-            msg += "{0} {1}\n".format(status, ext)
-        count_msg = "{} of {} extensions loaded.\n\n".format(
-            count_loaded, count_ext)
+            msg += f"{status} {ext}\n"
+        count_msg = f"{count_loaded} of {count_ext} extensions loaded.\n\n"
         embed = utils.make_embed(msg_type='info',
                                  title='Available Extensions',
                                  content=count_msg + msg)
@@ -50,50 +51,36 @@ class ExtensionManager:
     @ext.command()
     async def unload(self, ctx, ext):
         """Unload an extension."""
-        bot = ctx.bot
-        ext_name = ("firetail.extensions." + ext)
-        if ext_name in bot.extensions:
-            bot.unload_extension(ext_name)
-            embed = utils.make_embed(msg_type='success',
-                                     title=ext + ' extension unloaded.')
-            await ctx.send(embed=embed)
+        ext_name = f"firetail.extensions.{ext}"
+        if ext_name in ctx.bot.extensions:
+            ctx.bot.unload_extension(ext_name)
+            await ctx.success(f'{ext} extension unloaded.')
         else:
-            embed = utils.make_embed(
-                msg_type='error', title=ext + ' extension not loaded.')
-            await ctx.send(embed=embed)
+            await ctx.error(f'{ext} extension not loaded.')
 
-    @ext.command()
+    @ext.command(aliases=["reload"])
     async def load(self, ctx, ext):
         """Load or reload an extension."""
-        bot = ctx.bot
         ext_folder = "extensions"
         ext_dir = os.path.join(os.path.dirname(__file__), "..", ext_folder)
         ext_files = [name for _, name, _ in pkgutil.iter_modules([ext_dir])]
-        if ext in ext_files:
-            ext_name = ("firetail.extensions." + ext)
-            was_loaded = ext_name in bot.extensions
-            try:
-                bot.unload_extension(ext_name)
-                bot.load_extension(ext_name)
-                if was_loaded:
-                    msg = ext + ' extension reloaded.'
-                else:
-                    msg = ext + ' extension loaded.'
-                embed = utils.make_embed(msg_type='success', title=msg)
-                await ctx.send(embed=embed)
-            except Exception as e:
-                # logger.critical('Error loading ext: {} - {}: {}'.format(
-                #    str(ext), type(e).__name__, e))
-                embed = utils.make_embed(
-                    msg_type='error',
-                    title='Error when loading ' + str(ext),
-                    content='{}: {}'.format(type(e).__name__, e))
-                await ctx.send(embed=embed)
-        else:
-            embed = utils.make_embed(
-                msg_type='error',
-                title=ext + ' extension not found.')
-            await ctx.send(embed=embed)
+        if ext not in ext_files:
+            await ctx.error(f"{ext} extension not found.")
+            return
+
+        ext_name = f"firetail.extensions.{ext}"
+        was_loaded = ext_name in ctx.bot.extensions
+
+        try:
+            if was_loaded:
+                ctx.bot.reload_extension(ext_name)
+                await ctx.success(f'{ext} extension reloaded.')
+            else:
+                ctx.bot.load_extension(ext_name)
+                await ctx.success(f'{ext} extension loaded.')
+        except commands.ExtensionFailed as e:
+            original_traceback = "\n".join(traceback.format_tb(e.original.__traceback__))
+            await ctx.codeblock(original_traceback, title=f"Exception on loading {ext}")
 
     @ext.command()
     async def showext(self, ctx):
@@ -103,6 +90,11 @@ class ExtensionManager:
                                  title='Raw Extension List',
                                  content='\n'.join(bot.extensions))
         await ctx.send(embed=embed)
+
+    @commands.command(name="load", aliases=["reload"])
+    async def load_alias(self, ctx, ext):
+        """Load or reload an extension."""
+        await ctx.invoke(self.load, ext)
 
     @commands.command()
     async def reload_core(self, ctx):
@@ -115,7 +107,7 @@ class ExtensionManager:
                                      title='Core Commands reloaded.')
             await ctx.send(embed=embed)
         except Exception as e:
-            msg = "{}: {}".format(type(e).__name__, e)
+            msg = f"{type(e).__name__}: {e}"
             embed = utils.make_embed(msg_type='error',
                                      title='Error loading Core Commands',
                                      content=msg)
@@ -132,11 +124,25 @@ class ExtensionManager:
                                      title='Data Manager reloaded.')
             await ctx.send(embed=embed)
         except Exception as e:
-            msg = "{}: {}".format(type(e).__name__, e)
+            msg = f"{type(e).__name__}: {e}"
             embed = utils.make_embed(msg_type='error',
                                      title='Error loading Data Manager',
                                      content=msg)
             await ctx.send(embed=embed)
+
+    @commands.command()
+    async def reload_esi(self, ctx):
+        """Reload API module."""
+
+        try:
+            from firetail.lib import esi
+            importlib.reload(esi)
+        except Exception as e:
+            tb = "\n".join(traceback.format_tb(e.__traceback__))
+            await ctx.codeblock(tb, title="Exception on loading ESI")
+        else:
+            ctx.bot.esi_data = esi.ESI(ctx.bot.session)
+            await ctx.success("ESI Reloaded")
 
 
 def setup(bot):
