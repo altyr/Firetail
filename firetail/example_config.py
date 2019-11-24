@@ -13,7 +13,6 @@ bot_permissions = 2080762945
 # load extensions on start/restart
 # alternatively load manually with !load after start.
 preload_extensions = [
-    'add_kills',            # Enables the addkills command
     'char_lookup',          # Get character info
     'dev',                  # Developer tools
     'eve_status',           # Get the status of the server and the player count
@@ -54,20 +53,6 @@ welcome_string = (
 # Auto Responses - Add more with the format 'trigger': 'Auto response'
 # auto_responses = {
 #     'auth': 'To get roles on this server visit: '
-# }
-
-# Killmail Settings - !addkills command has replaced this.
-# killmail = {  # add or remove groups as needed, groups must have unique names.
-#     'bigKills': True,  # Enable the sharing of eve wide big kills
-#     'bigKillsValue': 1000000000,  # Big kill ISK threshold
-#     'bigKillsChannel': '389827425581662226',  # Channel big kills are posted to
-#     'killmailGroups': {
-#         'group1': {  # feel free to add additional groups, be sure that each group has a unique name
-#             'id': '498125261',  # Corp/Alliance ID
-#             'channelId': '244061582496104448',  # Channel ID
-#             'lossMails': True  # Show Loss Mails
-#         }
-#     }
 # }
 
 # Fleet-Up Settings
