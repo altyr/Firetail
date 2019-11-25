@@ -328,6 +328,7 @@ class CharLookup(commands.Cog):
             try:
                 data = await resp.json(content_type=None)
             except json.JSONDecodeError:
+                log.exception(f"Zkillboard killmail failed to parse correctly:\n{data}")
                 return None
             return data[0]
 
