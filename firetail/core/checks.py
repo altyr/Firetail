@@ -21,6 +21,8 @@ async def check_is_co_owner(ctx):
 async def check_is_guildowner(ctx):
     if await check_is_co_owner(ctx):
         return True
+    if not ctx.guild:
+        return False
     if ctx.author.id == ctx.guild.owner.id:
         return True
     return False
@@ -29,6 +31,8 @@ async def check_is_guildowner(ctx):
 async def check_is_admin(ctx):
     if await check_is_guildowner(ctx):
         return True
+    if not ctx.guild:
+        return False
     if ctx.author.guild_permissions.manage_guild:
         return True
     return False
@@ -37,6 +41,8 @@ async def check_is_admin(ctx):
 async def check_is_mod(ctx):
     if await check_is_admin(ctx):
         return True
+    if not ctx.guild:
+        return False
     if ctx.channel.permissions_for(ctx.author).manage_messages:
         return True
     return False
@@ -161,7 +167,7 @@ async def check_permissions(ctx, perms):
 def mod_or_permissions(**perms):
     async def predicate(ctx):
         has_perms_or_is_owner = await check_permissions(ctx, perms)
-        if ctx.guild is None:
+        if not ctx.guild:
             return has_perms_or_is_owner
         author = ctx.author
         # settings = ctx.bot.db.guild(ctx.guild)
@@ -182,7 +188,7 @@ def mod_or_permissions(**perms):
 def admin_or_permissions(**perms):
     async def predicate(ctx):
         has_perms_or_is_owner = await check_permissions(ctx, perms)
-        if ctx.guild is None:
+        if not ctx.guild:
             return has_perms_or_is_owner
         author = ctx.author
         is_guild_owner = author == ctx.guild.owner
@@ -197,7 +203,7 @@ def admin_or_permissions(**perms):
 def guildowner_or_permissions(**perms):
     async def predicate(ctx):
         has_perms_or_is_owner = await check_permissions(ctx, perms)
-        if ctx.guild is None:
+        if not ctx.guild:
             return has_perms_or_is_owner
         is_guild_owner = ctx.author == ctx.guild.owner
 
