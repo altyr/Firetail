@@ -29,7 +29,9 @@ class Killmail(commands.Cog):
         if sub_id:
             sql += " WHERE id = (?)"
             result = await db.select_var(sql, (sub_id,))
-            return result[0] or None
+            if result:
+                return result[0]
+            return None
 
         if channel_id:
             sql += " WHERE channelid = (?)"
@@ -51,6 +53,7 @@ class Killmail(commands.Cog):
 
     async def prepare_subs(self):
         await self.bot.wait_until_ready()
+        log.debug("Preparing killmail subs.")
 
         killboard_subs = await self.get_subs()
         for sub_data in killboard_subs:
@@ -88,8 +91,8 @@ class Killmail(commands.Cog):
         async with self.bot.session.get(url) as resp:
             data = await resp.json()
             log.debug(json.dumps(data['package'], indent=4))
-        self.km_counter += 1
         if data['package']:
+            self.km_counter += 1
             self.process_mail(data['package'])
 
     @staticmethod
@@ -175,18 +178,18 @@ class Killmail(commands.Cog):
             await ctx.success(f'Killmail {sub_id} has been removed.')
             return
 
-        sql = "DELETE FROM add_kills WHERE channelid = (?)"
+        sql = "DELETE FROM add_kills WHERE channelid = ?"
         await db.execute_sql(sql, (ctx.channel.id,))
 
         rm_ids = []
         for sub in self.subs.values():
-            if sub.channel == ctx.channel.id:
+            if sub.channel.id == ctx.channel.id:
                 rm_ids.append(sub.id)
         for rm_id in rm_ids:
             del self.subs[rm_id]
 
         await ctx.success(
-            "All killmails removed for this channel.",
+            "All killmail subs removed for this channel.",
             "You may see more killmails that had already been submitted "
             "and partially processed in the message queue."
         )
