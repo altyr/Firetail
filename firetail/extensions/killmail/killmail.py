@@ -3,8 +3,8 @@ import json
 import logging
 from typing import Optional
 
+import aiohttp
 import discord
-import websockets
 from discord.ext import commands
 
 from firetail.core import checks
@@ -21,7 +21,7 @@ class Killmail(commands.Cog):
         self.subs = {}
         self.ws_task = None
         self.km_counter = 0
-        self.bot.loop.create_task(self.prepare_subs())
+        self.prepare = self.bot.loop.create_task(self.prepare_subs())
 
     @staticmethod
     async def get_subs(*, channel_id: int = None, sub_id: int = None):
@@ -62,27 +62,35 @@ class Killmail(commands.Cog):
             sub = Subscription(id_, channel, threshold, convert_to_bool(losses), group_id)
             self.subs[sub.id] = sub
 
-        self.ws_task = self.bot.loop.create_task(self.websocket_listen())
+        self.ws_task = self.bot.loop.create_task(self.listen_for_mails())
 
     def process_mail(self, killmail_data):
-        mail = Mail(killmail_data, self.bot.esi_data)
+        killmail_data['killmail']['zkb'] = killmail_data['zkb']
+        mail = Mail(killmail_data['killmail'], self.bot.esi_data)
         if mail.npc:
             return
         asyncio.gather(*[sub.mail(mail) for sub in self.subs.values()])
 
-    async def websocket_listen(self):
-        log.debug("Started listening to killmail websocket.")
-        uri = "wss://zkillboard.com:2096"
-        async with websockets.connect(uri, ssl=True) as ws:
-            await ws.send('{"action":"sub","channel":"killstream"}')
-            async for mail_data in ws:
-                self.km_counter += 1
-                try:
-                    data = json.loads(mail_data)
-                except json.JSONDecodeError:
-                    log.exception("Killmail Websocket data malformed.")
-                else:
-                    self.process_mail(data)
+    async def listen_for_mails(self):
+        log.debug("Listening for killmails.")
+        while True:
+            try:
+                await self.get_new_mail()
+            except (json.JSONDecodeError, KeyError):
+                log.exception("Killmail data was badly formed.")
+                pass
+            except aiohttp.ClientError:
+                log.exception("Failure when requesting new mails encountered.")
+                pass
+
+    async def get_new_mail(self):
+        url = f"https://redisq.zkillboard.com/listen.php?queueID=firetail_{self.bot.user.id}"
+        async with self.bot.session.get(url) as resp:
+            data = await resp.json()
+            log.debug(json.dumps(data['package'], indent=4))
+        self.km_counter += 1
+        if data['package']:
+            self.process_mail(data['package'])
 
     @staticmethod
     async def remove_bad_channel(channel_id):
@@ -179,7 +187,7 @@ class Killmail(commands.Cog):
 
         await ctx.success(
             "All killmails removed for this channel.",
-            "You may see a more killmails that had already been submitted "
+            "You may see more killmails that had already been submitted "
             "and partially processed in the message queue."
         )
 
